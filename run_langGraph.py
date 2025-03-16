@@ -27,15 +27,15 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.service import Service as ChromeService
 
-from prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_TEXT_ONLY
+from prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_TEXT_ONLY,SYSTEM_PROMPT_TYPE
 from utils import get_web_element_rect, encode_image, extract_information, print_message,\
     get_webarena_accessibility_tree, get_pdf_retrieval_ans_from_assistant, clip_message_and_obs, clip_message_and_obs_text_only
 
-
+from RagFlow import RagflowAPIConfig , RagflowAPI 
 
 class State(TypedDict):
     task: Annotated[str, "The task to be completed"]
-    #messages: Annotated[list, add_messages]
+    auto_messages: Annotated[list, add_messages]
     messages: Annotated[list, "messages"]
     driver: Annotated[object, "Selenium WebDriver instance"]
     download_files: Annotated[list, "List of downloaded files"]
@@ -50,6 +50,7 @@ class State(TypedDict):
     current_response : Annotated[str, "Current response from the assistant"]
     current_screenshot : Annotated[str, "Current screenshot"]
     LLM_Cost : Annotated[float, "Total cost of LLM API"]
+    RetrieverContext : Annotated[str, "Retriever Context"]
 
 def driver_config(args):
     options = webdriver.ChromeOptions()
@@ -78,28 +79,80 @@ def setup_environment(args):
     os.makedirs(result_dir, exist_ok=True)
     return result_dir
 
+
+def GetRetrieverContext(ragConfig ,Task , Domain , print_answer = False) -> Dict[str, Any]:
+    
+    if ragConfig.base_url == "" or ragConfig.chat_id == "" or ragConfig.api_key == "":
+        #return "There are no retriever context information"
+        return None
+
+    #task = "查詢資訊工程學系碩士班的課程中，訊息理解與Web智慧這門課的授課教授是誰?"
+    #domain = "https://cis.ncu.edu.tw/Course/main/news/announce"
+    query = f"I need to complete the task of '{Task}' on the '{Domain}' website. What are the most likely methods to achieve this?"
+
+    api = RagflowAPI(ragConfig)
+
+    session_id = api.create_session()
+    if not session_id:
+        logging.error("Failed to create session")
+        return
+
+    print("Start to get retriever context")
+    answer = api.get_completion(query, session_id)
+
+    if print_answer:
+        if answer:
+            print("\n" + "=" * 50)
+            print("Response:", answer)
+        else:
+            print("Failed to get response")
+
+    print("Finish to get retriever context")
+    return answer
+
 def launchBrowser(state: State):
     args = state["args"]
     task = state["task"]
     #task_dir = state["task_dir"]
     
+    # 根據參數設定配置Chrome瀏覽器選項
     options = driver_config(args)
+    
+    # 初始化Chrome瀏覽器驅動
     driver = webdriver.Chrome(options=options)
+    # 設置瀏覽器視窗大小
     driver.set_window_size(args.window_width, args.window_height)
+    # 導航到任務指定的網頁
     driver.get(task['web'])
     
     try:
-        driver.find_element(By.TAG_NAME, 'body').click()
+        # 等待頁面載入完成
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support.expected_conditions import staleness_of
+        
+        WebDriverWait(driver, 10).until(
+            lambda driver: driver.execute_script('return document.readyState') == 'complete'
+        )
     except:
         pass
     
+    # 防止空白鍵的預設行為(頁面滾動)，除非焦點在文本輸入框
     driver.execute_script("""window.onkeydown = function(e) {if(e.keyCode == 32 && e.target.type != 'text' && e.target.type != 'textarea') {e.preventDefault();}};""")
-    time.sleep(5)
     
+    # 更新狀態：設置驅動器、初始化下載文件列表和迭代計數器
     state["driver"] = driver
     state["download_files"] = []
     state["iteration"] = 0
-    
+
+    # 初始化RagFlow API配置
+    ragFlowConfig = RagflowAPIConfig(
+        base_url = args.ragFlow_url,
+        chat_id = args.ragFlow_chat_id,
+        api_key = args.ragFlow_api_key
+    )
+
+    state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig,task['ques'], task['web'])
+    #state["RetrieverContext"] = None
     return state
 
 def format_observation(state: State):
@@ -133,13 +186,14 @@ def format_observation(state: State):
     return state
 def format_msg(it, init_msg, pdf_obs, warn_obs, web_img_b64, web_text, retriever_context):
     if it == 1:
-        init_msg += f"I've provided the tag name of each element and the text it contains (if text exists). Note that a <textarea> or <input> may be a textbox, but not exactly. Not all elements are in the screenshot. You can identify them by visible or invisible words. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"
+        #init_msg += f"I've provided the tag name of each element and the text it contains (if text exists). Note that a <textarea> or <input> may be a textbox, but not exactly. Not all elements are in the screenshot. You can identify them by visible or invisible words. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"
+        init_msg += f"I've provided the tag name of each element and the text it contains (if text exists). Note that <textarea> or <input> may be textbox, but not exactly. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"
         init_msg_format = {
             'role': 'user',
             'content': [
                 {'type': 'text', 'text': init_msg},
             ],
-            #'context': retriever_context
+            'context': retriever_context
         }
         init_msg_format['content'].append({"type": "image_url",
                                            "image_url": {"url": f"data:image/png;base64,{web_img_b64}"}})
@@ -155,7 +209,7 @@ def format_msg(it, init_msg, pdf_obs, warn_obs, web_img_b64, web_text, retriever
                         'image_url': {"url": f"data:image/png;base64,{web_img_b64}"}
                     }
                 ],
-                #'context': retriever_context
+                'context': retriever_context
             }
         else:
             curr_msg = {
@@ -167,7 +221,7 @@ def format_msg(it, init_msg, pdf_obs, warn_obs, web_img_b64, web_text, retriever
                         'image_url': {"url": f"data:image/png;base64,{web_img_b64}"}
                     }
                 ],
-                #'context': retriever_context
+                'context': retriever_context
             }
         return curr_msg
 
@@ -194,13 +248,13 @@ def format_msg_text_only(it, init_msg, pdf_obs, warn_obs, ac_tree):
 
 def thoughts(state: State):
     args = state["args"]
-    
+
     # 僅在 state["messages"] 為空時加入 system message (避免重置先前訊息)
     if not state["messages"]:
         if args.text_only:
             state["messages"].append({'role': 'system', 'content': SYSTEM_PROMPT_TEXT_ONLY})
         else:
-            state["messages"].append({'role': 'system', 'content': SYSTEM_PROMPT})
+            state["messages"].append({'role': 'system', 'content': SYSTEM_PROMPT_TYPE})
     
     obs_prompt = "Observation: please analyze the attached screenshot and give the Thought and Action. "
     if args.text_only:
@@ -209,6 +263,14 @@ def thoughts(state: State):
     # ...existing code...
     init_msg = f"""Now given a task: {state['task']['ques']}  Please interact with https://www.example.com and get the answer. \n"""
     init_msg = init_msg.replace('https://www.example.com', state['task']['web'])
+    
+
+    # state["RetrieverContext"] is not null and no contain "No data available."
+    if (state["RetrieverContext"] and "No data available." not in state["RetrieverContext"]):
+        init_msg = init_msg + "Here's the following operating manual provides suggestions: " + state["RetrieverContext"]
+    # clear state["RetrieverContext"] 
+    state["RetrieverContext"] = None
+    
     init_msg = init_msg + obs_prompt
 
     if not args.text_only:
@@ -257,11 +319,7 @@ def thoughts(state: State):
     state["messages"].append({'role': 'assistant', 'content': gpt_response})
     state["current_response"] = gpt_response
     
-    # 加入迭代次數檢查
-    if state["iteration"] >= state["args"].max_iter:
-        logging.info("Reached maximum iterations, forcing answer...")
-        state["current_response"] = "Thought: Maximum iterations reached.\nAction: answer{\n'content': 'Task could not be completed within the maximum allowed iterations.'}"
-        return state
+    
 
     return state
 
@@ -302,7 +360,7 @@ def exec_action_type(info, web_ele, driver_task):
 
     actions.send_keys(type_content)
     actions.pause(2)
-    actions.send_keys(Keys.ENTER)
+    #actions.send_keys(Keys.ENTER)
     actions.perform()
     time.sleep(10)
     return warn_obs
@@ -340,7 +398,7 @@ def action(state: State):
     # 如果是 answer action，直接返回不再循環
     if action_key == 'answer':
         logging.info(f'Final Answer: {info["content"]}')
-        with open(os.path.join(state["task_dir"], "answer.txt"), "w") as f:
+        with open(os.path.join(state["task_dir"], "answer.txt"), "w", encoding='utf-8' ) as f:
             f.write(info["content"])
         return state
 
@@ -450,9 +508,15 @@ def action(state: State):
 
 def has_answer(state: State) -> Literal["action", "answer"]:
     
-    if not state["current_response"]:
-        return "action"
+    #if not state["current_response"]:
+    #    return "action"
     
+    # 檢查迭代次數
+    if state["iteration"] >= state["args"].max_iter:
+        logging.info("Reached maximum iterations, forcing answer...")
+        state["current_response"] = "Thought: Maximum iterations reached.\nAction: ANSWER; 'Task could not be completed within the maximum allowed iterations.'"
+        return "answer"
+
     response = state["current_response"]
     try:
         chosen_action = re.split(r'Thought:|Action:|Observation:', response)[2].strip()
@@ -465,8 +529,9 @@ def answer(state: State):
     response = state["current_response"]
     answer_content = re.split(r'Thought:|Action:|Observation:', response)[2].strip()
     
-    with open(os.path.join(state["task_dir"], "answer.txt"), "w") as f:
+    with open(os.path.join(state["task_dir"], "answer.txt"), "w", encoding='utf-8') as f:
         f.write(answer_content)
+        f.close()
     
     print_message(state["messages"], state["task_dir"])
     state["driver"].quit()
@@ -553,6 +618,10 @@ def main():
     parser.add_argument("--fix_box_color", action='store_true')
     parser.add_argument("--azure_endpoint", type=str, default="")
     parser.add_argument("--api_version", type=str, default="")
+    parser.add_argument("--ragFlow_url", type=str, default="")
+    parser.add_argument("--ragFlow_chat_id", type=str, default="")
+    parser.add_argument("--ragFlow_api_key", type=str, default="")
+
 
     args = parser.parse_args()
 
@@ -588,7 +657,7 @@ def main():
     workflow.add_node("action", action)
     workflow.add_node("answer", answer)
     
-    # Add edges - 修正邊的定義
+    # Add edges
     workflow.add_edge(START, "launchBrowser")
     workflow.add_edge("launchBrowser", "observation")
     workflow.add_edge("observation", "thoughts")
@@ -634,14 +703,16 @@ def main():
             "iteration": 0,
             "driver": None,
             "current_response": None,
-            "LLM_Cost": cost,
+            "LLM_Cost": cost
         }
         
         try:
-            result = graph.invoke(initial_state)
+            result = graph.invoke(initial_state, {"recursion_limit": 100})
             logging.info(f"Task {task['id']} completed successfully")
         except Exception as e:
+            import traceback
             logging.error(f"Task {task['id']} failed: {str(e)}")
+            traceback.print_exc()
             continue
 
     #image = graph.get_graph().draw_mermaid_png()
