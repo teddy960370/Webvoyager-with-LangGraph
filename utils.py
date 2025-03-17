@@ -50,7 +50,7 @@ def get_web_element_rect(browser, fix_color=True):
             const markedElements = document.querySelectorAll("div[style*='z-index: 2147483647']");
             
             markedElements.forEach(element => {
-                if (element.style.position === "fixed" && element.style.pointerEvents === "none") {
+                if (element.style.position === "absolute" && element.style.pointerEvents === "none") {
                     element.remove();
                 }
             });
@@ -71,39 +71,47 @@ def get_web_element_rect(browser, fix_color=True):
             ).map(function(element) {
                 var vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
                 var vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+                var bodyRect = document.body.getBoundingClientRect();
+                var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
                 
-                var rects = [...element.getClientRects()].filter(bb => {
-                var center_x = bb.left + bb.width / 2;
-                var center_y = bb.top + bb.height / 2;
-                var elAtCenter = document.elementFromPoint(center_x, center_y);
-
-                return elAtCenter === element || element.contains(elAtCenter) 
-                }).map(bb => {
-                const rect = {
-                    left: Math.max(0, bb.left),
-                    top: Math.max(0, bb.top),
-                    right: Math.min(vw, bb.right),
-                    bottom: Math.min(vh, bb.bottom)
-                };
-                return {
-                    ...rect,
-                    width: rect.right - rect.left,
-                    height: rect.bottom - rect.top
-                }
+                var rects = [...element.getClientRects()].map(bb => {
+                    const rect = {
+                        left: bb.left + window.pageXOffset,
+                        top: bb.top + window.pageYOffset,
+                        right: bb.right + window.pageXOffset,
+                        bottom: bb.bottom + window.pageYOffset,
+                        width: bb.width,
+                        height: bb.height
+                    };
+                    
+                    // 檢查元素是否在當前視窗中可見
+                    const isVisible = (
+                        rect.top < (window.innerHeight + scrollTop) &&
+                        rect.bottom > scrollTop &&
+                        rect.left < (window.innerWidth + window.pageXOffset) &&
+                        rect.right > window.pageXOffset
+                    );
+                    
+                    return {
+                        ...rect,
+                        isVisible
+                    }
                 });
 
                 var area = rects.reduce((acc, rect) => acc + rect.width * rect.height, 0);
+                var isAnyVisible = rects.some(rect => rect.isVisible);
 
                 return {
-                element: element,
-                include: 
-                    (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.tagName === "SELECT") ||
-                    (element.tagName === "BUTTON" || element.tagName === "A" || (element.onclick != null) || window.getComputedStyle(element).cursor == "pointer") ||
-                    (element.tagName === "IFRAME" || element.tagName === "VIDEO" || element.tagName === "LI" || element.tagName === "TD" || element.tagName === "OPTION")
-                ,
-                area,
-                rects,
-                text: element.textContent.trim().replace(/\s{2,}/g, ' ')
+                    element: element,
+                    include: 
+                        (element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.tagName === "SELECT") ||
+                        (element.tagName === "BUTTON" || element.tagName === "A" || (element.onclick != null) || window.getComputedStyle(element).cursor == "pointer") ||
+                        (element.tagName === "IFRAME" || element.tagName === "VIDEO" || element.tagName === "LI" || element.tagName === "TD" || element.tagName === "OPTION")
+                    ,
+                    area,
+                    rects,
+                    isVisible: isAnyVisible,
+                    text: element.textContent.trim().replace(/\s{2,}/g, ' ')
                 };
             }).filter(item =>
                 item.include && (item.area >= 20)
@@ -147,10 +155,19 @@ def get_web_element_rect(browser, fix_color=True):
             // Lets create a floating border on top of these elements that will always be visible
             items.forEach(function(item, index) {
                 item.rects.forEach((bbox) => {
+                const container = document.createElement("div");
+                container.style.position = "absolute";
+                container.style.top = "0";
+                container.style.left = "0";
+                container.style.width = "0";
+                container.style.height = "0";
+                container.style.overflow = "visible";
+                document.body.appendChild(container);
+
                 newElement = document.createElement("div");
                 var borderColor = COLOR_FUNCTION(index);
                 newElement.style.outline = `2px dashed ${borderColor}`;
-                newElement.style.position = "fixed";
+                newElement.style.position = "absolute";
                 newElement.style.left = bbox.left + "px";
                 newElement.style.top = bbox.top + "px";
                 newElement.style.width = bbox.width + "px";
@@ -158,15 +175,13 @@ def get_web_element_rect(browser, fix_color=True):
                 newElement.style.pointerEvents = "none";
                 newElement.style.boxSizing = "border-box";
                 newElement.style.zIndex = 2147483647;
-                // newElement.style.background = `${borderColor}80`;
                 
                 // Add floating label at the corner
                 var label = document.createElement("span");
                 label.textContent = index;
                 label.style.position = "absolute";
-                //label.style.top = "-19px";
-                label.style.top = Math.max(-19, -bbox.top) + "px";
-                //label.style.left = "0px";
+                // 修正標籤位置計算，不再考慮 window.pageYOffset
+                label.style.top = Math.max(-19, -bbox.top + bbox.top) + "px";
                 label.style.left = Math.min(Math.floor(bbox.width / 5), 2) + "px";
                 label.style.background = borderColor;
                 label.style.color = "white";
@@ -175,18 +190,11 @@ def get_web_element_rect(browser, fix_color=True):
                 label.style.borderRadius = "2px";
                 newElement.appendChild(label);
                 
-                document.body.appendChild(newElement);
-                labels.push(newElement);
-                // item.element.setAttribute("-ai-label", label.textContent);
+                container.appendChild(newElement);
+                labels.push(container);
                 });
             })
 
-            // For the first way
-            // return [labels, items.map(item => ({
-            //     rect: item.rects[0] // assuming there's at least one rect
-            // }))];
-
-            // For the second way
             return [labels, items]
         }
         return markPage();""".replace("COLOR_FUNCTION", selected_function)
@@ -205,25 +213,27 @@ def get_web_element_rect(browser, fix_color=True):
 
         if not label_text:
             if (ele_tag_name.lower() == 'input' and ele_type in input_attr_types) or ele_tag_name.lower() == 'textarea' or (ele_tag_name.lower() == 'button' and ele_type in ['submit', 'button']):
+                visibility = "(visible)" if items_raw[web_ele_id]['isVisible'] else "(not visible)"
                 if ele_aria_label:
-                    format_ele_text.append(f"[{web_ele_id}]: <{ele_tag_name}> \"{ele_aria_label}\";")
+                    format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{ele_aria_label}\";")
                 elif ele_name:
-                    format_ele_text.append(f"[{web_ele_id}]: <{ele_tag_name}> \"{ele_name}\";")
+                    format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{ele_name}\";")
                 else:
-                    format_ele_text.append(f"[{web_ele_id}]: <{ele_tag_name}> \"{label_text}\";" )
+                    format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{label_text}\";" )
 
         elif label_text and len(label_text) < 200:
             if not ("<img" in label_text and "src=" in label_text):
+                visibility = "(visible)" if items_raw[web_ele_id]['isVisible'] else "(not visible)"
                 if ele_tag_name in ["button", "input", "textarea"]:
                     if ele_aria_label and (ele_aria_label != label_text):
-                        format_ele_text.append(f"[{web_ele_id}]: <{ele_tag_name}> \"{label_text}\", \"{ele_aria_label}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{label_text}\", \"{ele_aria_label}\";")
                     else:
-                        format_ele_text.append(f"[{web_ele_id}]: <{ele_tag_name}> \"{label_text}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{label_text}\";")
                 else:
                     if ele_aria_label and (ele_aria_label != label_text):
-                        format_ele_text.append(f"[{web_ele_id}]: \"{label_text}\", \"{ele_aria_label}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility}: \"{label_text}\", \"{ele_aria_label}\";")
                     else:
-                        format_ele_text.append(f"[{web_ele_id}]: \"{label_text}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility}: \"{label_text}\";")
 
 
 
