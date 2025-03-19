@@ -108,6 +108,8 @@ def GetRetrieverContext(ragConfig ,Task , Domain , print_answer = False) -> Dict
             print("Failed to get response")
 
     print("Finish to get retriever context")
+    api.delete_session(session_id)
+
     return answer
 
 def launchBrowser(state: State):
