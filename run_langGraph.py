@@ -16,7 +16,7 @@ from io import BytesIO
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langchain_openai import AzureOpenAI,OpenAI,AzureChatOpenAI
+from langchain_openai import AzureOpenAI,OpenAI,AzureChatOpenAI,ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -164,7 +164,7 @@ def format_observation(state: State):
         args = state["args"]
         
         if not args.text_only:
-            rects, web_eles, web_eles_text = get_web_element_rect(driver, fix_color=args.fix_box_color)
+            rects, web_eles, web_eles_text = get_web_element_rect(driver, fix_color=args.fix_box_color,detect_all =args.som_scan_all)
             state["web_elements"] = {
                 "rects": rects,
                 "elements": web_eles,
@@ -623,19 +623,28 @@ def main():
     parser.add_argument("--ragFlow_url", type=str, default="")
     parser.add_argument("--ragFlow_chat_id", type=str, default="")
     parser.add_argument("--ragFlow_api_key", type=str, default="")
+    parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure"])
+    parser.add_argument("--som_scan_all", type=bool, default=False)
 
 
     args = parser.parse_args()
 
     #options = driver_config(args)
 
-    llm = AzureChatOpenAI(
-        api_key=args.api_key,
-        model=args.api_model,
-        api_version=args.api_version,
-        temperature=args.temperature,
-        azure_endpoint=args.azure_endpoint
-    )
+    if args.llm == "openai":
+        llm = ChatOpenAI(
+            api_key=args.api_key,
+            model=args.api_model,
+            temperature=args.temperature
+        )
+    elif args.llm == "azure":
+        llm = AzureChatOpenAI(
+            api_key=args.api_key,
+            model=args.api_model,
+            api_version=args.api_version,
+            temperature=args.temperature,
+            azure_endpoint=args.azure_endpoint
+        )
 
     # Save Result file
     result_dir = setup_environment(args)
