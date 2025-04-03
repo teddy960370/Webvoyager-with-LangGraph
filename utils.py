@@ -36,13 +36,24 @@ def encode_image(image_path):
 
 
 # interact with webpage and add rectangles on elements
-def get_web_element_rect(browser, fix_color=True):
+def get_web_element_rect(browser, fix_color=True, detect_all=False):
+    """
+    Get web elements with highlighting rectangles.
+    
+    Args:
+        browser: Selenium WebDriver instance
+        fix_color: Whether to use fixed color for rectangles
+        detect_all: If True, detect all elements; if False, only detect visible elements
+    
+    Returns:
+        rects: Rectangles for highlighting elements
+        web_elements: List of web elements
+        format_ele_text: Formatted text describing elements
+    """
     if fix_color:
         selected_function = "getFixedColor"
-        # color_you_like = '#5210da'
     else:
         selected_function = "getRandomColor"
-
 
     remove_SoM_js = """
         function removeMarks() {
@@ -50,7 +61,7 @@ def get_web_element_rect(browser, fix_color=True):
             const markedElements = document.querySelectorAll("div[style*='z-index: 2147483647']");
             
             markedElements.forEach(element => {
-                if (element.style.position === "absolute" && element.style.pointerEvents === "none") {
+                if ((element.style.position === "absolute" || element.style.position === "fixed") && element.style.pointerEvents === "none") {
                     element.remove();
                 }
             });
@@ -64,42 +75,70 @@ def get_web_element_rect(browser, fix_color=True):
         let labels = [];
 
         function markPage() {
+            // 清除先前可能存在的標記
+            removeMarks();
+            
+            // 直接在JS中定義位置類型，方便測試修改
+            const POSITION_TYPE = "absolute";  // 可改為 "fixed" 測試浮動模式
+            const DETECT_ALL = """ + str(detect_all).lower() + """;
+            
+            var vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+            var vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+            var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            var scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            
             var bodyRect = document.body.getBoundingClientRect();
 
             var items = Array.prototype.slice.call(
                 document.querySelectorAll('*')
             ).map(function(element) {
-                var vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
-                var vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
-                var bodyRect = document.body.getBoundingClientRect();
-                var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                // 始終使用mark.js的方式處理可見矩形
+                var rects = [];
                 
-                var rects = [...element.getClientRects()].map(bb => {
-                    const rect = {
-                        left: bb.left + window.pageXOffset,
-                        top: bb.top + window.pageYOffset,
-                        right: bb.right + window.pageXOffset,
-                        bottom: bb.bottom + window.pageYOffset,
-                        width: bb.width,
-                        height: bb.height
+                // 使用mark.js風格的元素可見性檢測
+                rects = [...element.getClientRects()].filter(bb => {
+                    var center_x = bb.left + bb.width / 2;
+                    var center_y = bb.top + bb.height / 2;
+                    var elAtCenter = document.elementFromPoint(center_x, center_y);
+                    return elAtCenter === element || element.contains(elAtCenter);
+                }).map(bb => {
+                    // 計算可見矩形 (與viewport限制)
+                    const visibleRect = {
+                        left: Math.max(0, bb.left),
+                        top: Math.max(0, bb.top),
+                        right: Math.min(vw, bb.right),
+                        bottom: Math.min(vh, bb.bottom),
+                        width: Math.min(vw, bb.right) - Math.max(0, bb.left),
+                        height: Math.min(vh, bb.bottom) - Math.max(0, bb.top)
                     };
                     
-                    // 檢查元素是否在當前視窗中可見
-                    const isVisible = (
-                        rect.top < (window.innerHeight + scrollTop) &&
-                        rect.bottom > scrollTop &&
-                        rect.left < (window.innerWidth + window.pageXOffset) &&
-                        rect.right > window.pageXOffset
-                    );
+                    // 轉換座標系統 (根據定位方式)
+                    const rect = {
+                        left: POSITION_TYPE === "fixed" ? visibleRect.left : visibleRect.left + scrollLeft,
+                        top: POSITION_TYPE === "fixed" ? visibleRect.top : visibleRect.top + scrollTop,
+                        right: POSITION_TYPE === "fixed" ? visibleRect.right : visibleRect.right + scrollLeft,
+                        bottom: POSITION_TYPE === "fixed" ? visibleRect.bottom : visibleRect.bottom + scrollTop,
+                        width: visibleRect.width,
+                        height: visibleRect.height,
+                        isVisible: true,
+                        // 保存原始的視窗相對座標，用於計算標籤位置
+                        viewportLeft: visibleRect.left,
+                        viewportTop: visibleRect.top
+                    };
                     
-                    return {
-                        ...rect,
-                        isVisible
-                    }
+                    return rect;
                 });
-
+                
                 var area = rects.reduce((acc, rect) => acc + rect.width * rect.height, 0);
-                var isAnyVisible = rects.some(rect => rect.isVisible);
+                var isAnyVisible = rects.length > 0;
+
+                // 特殊處理 SELECT 元素的文本內容
+                var elementText = "";
+                if (element.tagName === "SELECT") {
+                    elementText = Array.from(element.options).map(option => `'${option.text.trim()}'`).join(',');
+                } else {
+                    elementText = element.textContent.trim().replace(/\\s{2,}/g, ' ');
+                }
 
                 return {
                     element: element,
@@ -111,18 +150,15 @@ def get_web_element_rect(browser, fix_color=True):
                     area,
                     rects,
                     isVisible: isAnyVisible,
-                    text: element.textContent.trim().replace(/\s{2,}/g, ' ')
+                    text: elementText
                 };
             }).filter(item =>
-                item.include && (item.area >= 20)
+                item.include && (item.area >= 20) && (DETECT_ALL || item.isVisible)
             );
 
-            // Only keep inner clickable items
-            // first delete button inner clickable items
+            // 只保留內部可點擊項目
             const buttons = Array.from(document.querySelectorAll('button, a, input[type="button"], div[role="button"]'));
-
-            //items = items.filter(x => !buttons.some(y => y.contains(x.element) && !(x.element === y) ));
-            items = items.filter(x => !buttons.some(y => items.some(z => z.element === y) && y.contains(x.element) && !(x.element === y) ));
+            items = items.filter(x => !buttons.some(y => items.some(z => z.element === y) && y.contains(x.element) && !(x.element === y)));
             items = items.filter(x => 
                 !(x.element.parentNode && 
                 x.element.parentNode.tagName === 'SPAN' && 
@@ -130,115 +166,170 @@ def get_web_element_rect(browser, fix_color=True):
                 x.element.parentNode.getAttribute('role') &&
                 items.some(y => y.element === x.element.parentNode)));
 
-            items = items.filter(x => !items.some(y => x.element.contains(y.element) && !(x == y)))
+            items = items.filter(x => !items.some(y => x.element.contains(y.element) && !(x == y)));
 
-            // Function to generate random colors
+            // 顏色生成函數
             function getRandomColor(index) {
                 var letters = '0123456789ABCDEF';
                 var color = '#';
                 for (var i = 0; i < 6; i++) {
-                color += letters[Math.floor(Math.random() * 16)];
+                    color += letters[Math.floor(Math.random() * 16)];
                 }
                 return color;
             }
 
             function getFixedColor(index) {
-                var color = '#000000'
-                return color
+                var color = '#000000';
+                return color;
             }
-            //function getFixedColor(index){
-            //    var colors = ['#FF0000', '#00FF00', '#0000FF', '#000000']; // Red, Green, Blue, Black
-            //    return colors[index % 4];
-            //}
-            
 
-            // Lets create a floating border on top of these elements that will always be visible
+            // 為元素創建框線
             items.forEach(function(item, index) {
                 item.rects.forEach((bbox) => {
-                const container = document.createElement("div");
-                container.style.position = "absolute";
-                container.style.top = "0";
-                container.style.left = "0";
-                container.style.width = "0";
-                container.style.height = "0";
-                container.style.overflow = "visible";
-                document.body.appendChild(container);
-
-                newElement = document.createElement("div");
-                var borderColor = COLOR_FUNCTION(index);
-                newElement.style.outline = `2px dashed ${borderColor}`;
-                newElement.style.position = "absolute";
-                newElement.style.left = bbox.left + "px";
-                newElement.style.top = bbox.top + "px";
-                newElement.style.width = bbox.width + "px";
-                newElement.style.height = bbox.height + "px";
-                newElement.style.pointerEvents = "none";
-                newElement.style.boxSizing = "border-box";
-                newElement.style.zIndex = 2147483647;
-                
-                // Add floating label at the corner
-                var label = document.createElement("span");
-                label.textContent = index;
-                label.style.position = "absolute";
-                // 修正標籤位置計算，不再考慮 window.pageYOffset
-                label.style.top = Math.max(-19, -bbox.top + bbox.top) + "px";
-                label.style.left = Math.min(Math.floor(bbox.width / 5), 2) + "px";
-                label.style.background = borderColor;
-                label.style.color = "white";
-                label.style.padding = "2px 4px";
-                label.style.fontSize = "12px";
-                label.style.borderRadius = "2px";
-                newElement.appendChild(label);
-                
-                container.appendChild(newElement);
-                labels.push(container);
+                    newElement = document.createElement("div");
+                    var borderColor = COLOR_FUNCTION(index);
+                    newElement.style.outline = `2px dashed ${borderColor}`;
+                    newElement.style.position = POSITION_TYPE;
+                    
+                    // 直接使用我們計算好的座標
+                    newElement.style.left = bbox.left + "px";
+                    newElement.style.top = bbox.top + "px";
+                    newElement.style.width = bbox.width + "px";
+                    newElement.style.height = bbox.height + "px";
+                    newElement.style.pointerEvents = "none";
+                    newElement.style.boxSizing = "border-box";
+                    newElement.style.zIndex = 2147483647;
+                    
+                    // 添加標籤
+                    var label = document.createElement("span");
+                    label.textContent = index;
+                    label.style.position = "absolute";
+                    
+                    // 使用視窗相對座標計算標籤位置
+                    label.style.top = Math.max(-19, -bbox.viewportTop) + "px";
+                    label.style.left = Math.min(Math.floor(bbox.width / 5), 2) + "px";
+                    label.style.background = borderColor;
+                    label.style.color = "white";
+                    label.style.padding = "2px 4px";
+                    label.style.fontSize = "12px";
+                    label.style.borderRadius = "2px";
+                    newElement.appendChild(label);
+                    
+                    if (POSITION_TYPE === "absolute") {
+                        // 對於absolute定位，使用容器結構
+                        const container = document.createElement("div");
+                        container.style.position = "absolute";
+                        container.style.top = "0";
+                        container.style.left = "0";
+                        container.style.width = "0";
+                        container.style.height = "0";
+                        container.style.overflow = "visible";
+                        container.appendChild(newElement);
+                        document.body.appendChild(container);
+                        labels.push(container);
+                    } else {
+                        // 對於fixed定位，直接添加到body
+                        document.body.appendChild(newElement);
+                        labels.push(newElement);
+                    }
                 });
-            })
+            });
 
-            return [labels, items]
+            return [labels, items];
         }
+        
+        function removeMarks() {
+            // 查找所有可能的標記元素
+            const markedElements = document.querySelectorAll("div[style*='z-index: 2147483647']");
+            
+            markedElements.forEach(element => {
+                if ((element.style.position === "absolute" || element.style.position === "fixed") && element.style.pointerEvents === "none") {
+                    element.remove();
+                }
+            });
+            
+            // 清理之前創建的容器元素
+            if (labels && labels.length > 0) {
+                labels.forEach(label => {
+                    if (label && label.parentNode) {
+                        label.parentNode.removeChild(label);
+                    }
+                });
+                labels = [];
+            }
+        }
+        
         return markPage();""".replace("COLOR_FUNCTION", selected_function)
+    
     rects, items_raw = browser.execute_script(js_script)
 
-    # format_ele_text = [f"[{web_ele_id}]: \"{items_raw[web_ele_id]['text']}\";" for web_ele_id in range(len(items_raw)) if items_raw[web_ele_id]['text'] ]
     format_ele_text = []
+    filtered_elements = []
+    
     for web_ele_id in range(len(items_raw)):
-        label_text = items_raw[web_ele_id]['text']
-        ele_tag_name = items_raw[web_ele_id]['element'].tag_name
-        ele_type = items_raw[web_ele_id]['element'].get_attribute("type")
-        ele_aria_label = items_raw[web_ele_id]['element'].get_attribute("aria-label")
-        ele_name = items_raw[web_ele_id]['element'].get_attribute("name")
-        #is_visible = "visible" if items_raw[web_ele_id]['isVisible'] == True else "invisible"
-        input_attr_types = ['text', 'search', 'password', 'email', 'tel','checkbox','radio']
+        is_visible = items_raw[web_ele_id]['isVisible']
+        
+        # Skip invisible elements if detect_all is False
+        if not detect_all and not is_visible:
+            continue
+            
+        filtered_elements.append(items_raw[web_ele_id]['element'])
+        
+        try:
+            label_text = items_raw[web_ele_id]['text']
+            ele_tag_name = items_raw[web_ele_id]['element'].tag_name
+            ele_type = None
+            ele_aria_label = None
+            ele_name = None
+            
+            # Get attributes with individual try-except blocks to handle stale elements
+            try:
+                ele_type = items_raw[web_ele_id]['element'].get_attribute("type")
+            except:
+                pass
+                
+            try:
+                ele_aria_label = items_raw[web_ele_id]['element'].get_attribute("aria-label")
+            except:
+                pass
+                
+            try:
+                ele_name = items_raw[web_ele_id]['element'].get_attribute("name")
+            except:
+                pass
+                
+            input_attr_types = ['text', 'search', 'password', 'email', 'tel','checkbox','radio']
+        except Exception as e:
+            logging.error(f"Error accessing element attributes for element {web_ele_id}: {str(e)}")
+            continue
+        
+        visibility = "(visible)" if is_visible else "(not visible)"
+        visibility_text = f"{visibility}: " if detect_all else ""
 
         if not label_text:
             if (ele_tag_name.lower() == 'input' and ele_type in input_attr_types) or ele_tag_name.lower() == 'textarea' or (ele_tag_name.lower() == 'button' and ele_type in ['submit', 'button']):
-                visibility = "(visible)" if items_raw[web_ele_id]['isVisible'] else "(not visible)"
                 if ele_aria_label:
-                    format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{ele_aria_label}\";")
+                    format_ele_text.append(f"[{web_ele_id}] {visibility_text}<{ele_tag_name}> \"{ele_aria_label}\";")
                 elif ele_name:
-                    format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{ele_name}\";")
+                    format_ele_text.append(f"[{web_ele_id}] {visibility_text}<{ele_tag_name}> \"{ele_name}\";")
                 else:
-                    format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{label_text}\";" )
-
-        elif label_text and len(label_text) < 200:
+                    format_ele_text.append(f"[{web_ele_id}] {visibility_text}<{ele_tag_name}> \"{label_text}\";")
+        else:
             if not ("<img" in label_text and "src=" in label_text):
-                visibility = "(visible)" if items_raw[web_ele_id]['isVisible'] else "(not visible)"
-                if ele_tag_name in ["button", "input", "textarea"]:
+                if ele_tag_name.lower() in ["button", "input", "textarea", "select"]:
                     if ele_aria_label and (ele_aria_label != label_text):
-                        format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{label_text}\", \"{ele_aria_label}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility_text}<{ele_tag_name}> \"{label_text}\", \"{ele_aria_label}\";")
                     else:
-                        format_ele_text.append(f"[{web_ele_id}] {visibility}: <{ele_tag_name}> \"{label_text}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility_text}<{ele_tag_name}> \"{label_text}\";")
                 else:
                     if ele_aria_label and (ele_aria_label != label_text):
-                        format_ele_text.append(f"[{web_ele_id}] {visibility}: \"{label_text}\", \"{ele_aria_label}\";")
+                        format_ele_text.append(f"[{web_ele_id}] {visibility_text}\"{label_text}\", \"{ele_aria_label}\";")
                     else:
-                        format_ele_text.append(f"[{web_ele_id}] {visibility}: \"{label_text}\";")
-
-
+                        format_ele_text.append(f"[{web_ele_id}] {visibility_text}\"{label_text}\";")
 
     format_ele_text = '\t'.join(format_ele_text)
-    return rects, [web_ele['element'] for web_ele in items_raw], format_ele_text
+    
+    return rects, filtered_elements, format_ele_text
 
 
 def extract_information(text):
