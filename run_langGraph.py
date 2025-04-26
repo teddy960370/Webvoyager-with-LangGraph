@@ -31,6 +31,9 @@ from prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_TEXT_ONLY,SYSTEM_PROMPT_TYPE
 from utils import get_web_element_rect, encode_image, extract_information, print_message,\
     get_webarena_accessibility_tree, get_pdf_retrieval_ans_from_assistant, clip_message_and_obs, clip_message_and_obs_text_only
 
+# 引入本地 RAG 模組取代 RagFlow
+from local_rag import get_retriever_context
+
 from RagFlow import RagflowAPIConfig , RagflowAPI 
 
 class State(TypedDict):
@@ -55,6 +58,22 @@ class State(TypedDict):
 def driver_config(args):
     options = webdriver.ChromeOptions()
 
+    # 禁用自動化控制特徵
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    
+    # 添加隨機用戶代理
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0"
+    ]
+    import random
+    user_agent = random.choice(user_agents)
+    options.add_argument(f'--user-agent={user_agent}')
+
     if args.save_accessibility_tree:
         args.force_device_scale = True
 
@@ -62,9 +81,7 @@ def driver_config(args):
         options.add_argument("--force-device-scale-factor=1")
     if args.headless:
         options.add_argument("--headless")
-        options.add_argument(
-            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-        )
+
     options.add_experimental_option(
         "prefs", {
             "download.default_directory": args.download_dir,
@@ -81,36 +98,32 @@ def setup_environment(args):
 
 
 def GetRetrieverContext(ragConfig ,Task , Domain , print_answer = False) -> Dict[str, Any]:
+    """
+    獲取檢索結果作為任務上下文
     
-    if ragConfig.base_url == "" or ragConfig.chat_id == "" or ragConfig.api_key == "":
-        #return "There are no retriever context information"
+    使用優化的兩階段檢索流程：
+    1. 首先使用 LLM 決定最佳的檢索查詢
+    2. 然後使用該查詢進行實際的檢索
+    """
+    # 如果沒有配置或任務資訊不完整，直接返回 None
+    if Task is None or Domain is None:
         return None
-
-    #task = "查詢資訊工程學系碩士班的課程中，訊息理解與Web智慧這門課的授課教授是誰?"
-    #domain = "https://cis.ncu.edu.tw/Course/main/news/announce"
-    query = f"I need to complete the task of '{Task}' on the '{Domain}' website. What are the most likely methods to achieve this?"
-
-    api = RagflowAPI(ragConfig)
-
-    session_id = api.create_session()
-    if not session_id:
-        logging.error("Failed to create session")
-        return
-
-    print("Start to get retriever context")
-    answer = api.get_completion(query, session_id)
-
-    if print_answer:
-        if answer:
-            print("\n" + "=" * 50)
-            print("Response:", answer)
-        else:
-            print("Failed to get response")
-
-    print("Finish to get retriever context")
-    api.delete_session(session_id)
-
-    return answer
+        
+    # 使用本地 RAG 模組獲取上下文
+    # 注意：我們需要從 ragConfig 中提取 LLM 實例
+    llm = None
+    if hasattr(ragConfig, 'llm'):
+        llm = ragConfig.llm
+    
+    # 調用優化後的檢索函數
+    context = get_retriever_context(Task, Domain, llm, print_answer)
+    
+    # 如果沒有檢索到上下文或發生錯誤，返回 None
+    if context is None or "No data available." in context:
+        logging.warning(f"未能為任務 '{Task}' 在網站 '{Domain}' 檢索到有用的上下文")
+        return None
+        
+    return context
 
 def launchBrowser(state: State):
     args = state["args"]
@@ -122,6 +135,32 @@ def launchBrowser(state: State):
     
     # 初始化Chrome瀏覽器驅動
     driver = webdriver.Chrome(options=options)
+
+    # 使用 selenium_stealth
+    from selenium_stealth import stealth
+    
+    stealth(
+        driver,
+        languages=["zh-TW", "en-US"],
+        vendor="Google Inc.",
+        platform="Win32",
+        webgl_vendor="Intel Inc.",
+        renderer="Intel Iris OpenGL Engine",
+        fix_hairline=True,
+        run_on_insecure_origins=True
+    )
+    
+    # 重要：消除 webdriver 指紋
+    driver.execute_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    )
+    
+    # 模擬真實使用者行為
+    driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+        "userAgent": driver.execute_script("return navigator.userAgent"),
+        "acceptLanguage": "zh-TW,zh;q=0.9,en;q=0.8"
+    })
+
     # 設置瀏覽器視窗大小
     driver.set_window_size(args.window_width, args.window_height)
     # 導航到任務指定的網頁
@@ -146,14 +185,15 @@ def launchBrowser(state: State):
     state["download_files"] = []
     state["iteration"] = 0
 
-    # 初始化RagFlow API配置
-    ragFlowConfig = RagflowAPIConfig(
-        base_url = args.ragFlow_url,
-        chat_id = args.ragFlow_chat_id,
-        api_key = args.ragFlow_api_key
-    )
+    # 初始化RagFlow API配置，但使用本地 RAG
+    ragFlowConfig = type('RagConfig', (), {
+        'base_url': args.ragFlow_url,
+        'chat_id': args.ragFlow_chat_id,
+        'api_key': args.ragFlow_api_key,
+        'llm': state["llm"]  # 傳遞 LLM 實例給 local_rag
+    })
 
-    state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig,task['ques'], task['web'])
+    state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig, task['ques'], task['web'])
     #state["RetrieverContext"] = None
     return state
 
@@ -334,6 +374,12 @@ def exec_action_click(info, web_ele, driver_task):
 def exec_action_type(info, web_ele, driver_task):
     warn_obs = ""
     type_content = info['content']
+
+    #若type_content頭尾為引號或雙引號，則去除引號
+    if (type_content.startswith('"') and type_content.endswith('"') or 
+        type_content.startswith("'") and type_content.endswith("'")):
+        type_content = type_content[1:-1]
+
 
     ele_tag_name = web_ele.tag_name.lower()
     ele_type = web_ele.get_attribute("type")
