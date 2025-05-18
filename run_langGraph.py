@@ -88,6 +88,11 @@ def driver_config(args):
             "plugins.always_open_pdf_externally": True
         }
     )
+
+    # 在 driver_config 函數中添加以下選項
+    options.add_argument('--disable-gpu')  # 停用 GPU 加速
+    options.add_argument('--disable-software-rasterizer')  # 停用軟體光柵化
+    options.add_argument('--disable-features=MediaSessionService') # 直接停用媒體功能
     return options
 
 def setup_environment(args):
@@ -97,7 +102,7 @@ def setup_environment(args):
     return result_dir
 
 
-def GetRetrieverContext(ragConfig ,Task , Domain , print_answer = False) -> Dict[str, Any]:
+def GetRetrieverContext(ragConfig ,Task , Domain ,webName, print_answer = False) -> Dict[str, Any]:
     """
     獲取檢索結果作為任務上下文
     
@@ -116,7 +121,7 @@ def GetRetrieverContext(ragConfig ,Task , Domain , print_answer = False) -> Dict
         llm = ragConfig.llm
     
     # 調用優化後的檢索函數
-    context = get_retriever_context(Task, Domain, llm, print_answer)
+    context = get_retriever_context(Task, Domain, webName, llm, print_answer)
     
     # 如果沒有檢索到上下文或發生錯誤，返回 None
     if context is None or "No data available." in context:
@@ -136,30 +141,7 @@ def launchBrowser(state: State):
     # 初始化Chrome瀏覽器驅動
     driver = webdriver.Chrome(options=options)
 
-    # 使用 selenium_stealth
-    from selenium_stealth import stealth
     
-    stealth(
-        driver,
-        languages=["zh-TW", "en-US"],
-        vendor="Google Inc.",
-        platform="Win32",
-        webgl_vendor="Intel Inc.",
-        renderer="Intel Iris OpenGL Engine",
-        fix_hairline=True,
-        run_on_insecure_origins=True
-    )
-    
-    # 重要：消除 webdriver 指紋
-    driver.execute_script(
-        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-    )
-    
-    # 模擬真實使用者行為
-    driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-        "userAgent": driver.execute_script("return navigator.userAgent"),
-        "acceptLanguage": "zh-TW,zh;q=0.9,en;q=0.8"
-    })
 
     # 設置瀏覽器視窗大小
     driver.set_window_size(args.window_width, args.window_height)
@@ -193,7 +175,7 @@ def launchBrowser(state: State):
         'llm': state["llm"]  # 傳遞 LLM 實例給 local_rag
     })
 
-    state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig, task['ques'], task['web'])
+    #state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig, task['ques'], task['web'],task['web_name'])
     #state["RetrieverContext"] = None
     return state
 
@@ -599,19 +581,22 @@ def call_gpt4v_api(args, llm, messages):
     while True:
         try:
             if not args.text_only:
-                logging.info('Calling gpt4v API...')
+                logging.info('Calling Gemini API...')
                 response = llm.invoke(messages)
             else:
-                logging.info('Calling gpt4 API...')
+                logging.info('Calling Gemini API...')
                 response = llm.invoke(messages, timeout=30)
 
             # Extract token usage from response metadata
-            #prompt_tokens = response.metadata.get('prompt_tokens', 0)
-            #completion_tokens = response.metadata.get('completion_tokens', 0)
             token_usage = response.response_metadata.get('token_usage', {})
             prompt_tokens = token_usage.get('prompt_tokens', 0)
             completion_tokens = token_usage.get('completion_tokens', 0)
 
+            if not prompt_tokens and not completion_tokens:
+                # Gemini可能沒有提供token計數，使用估算值
+                prompt_tokens = len(str(messages)) // 4
+                completion_tokens = len(response.content) // 4
+                
             logging.info(f'Prompt Tokens: {prompt_tokens}; Completion Tokens: {completion_tokens}')
 
             return prompt_tokens, completion_tokens, False, response
@@ -669,9 +654,8 @@ def main():
     parser.add_argument("--ragFlow_url", type=str, default="")
     parser.add_argument("--ragFlow_chat_id", type=str, default="")
     parser.add_argument("--ragFlow_api_key", type=str, default="")
-    parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure"])
+    parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure","openrouter","gemini"])
     parser.add_argument("--som_scan_all", type=bool, default=False)
-
 
     args = parser.parse_args()
 
@@ -690,6 +674,22 @@ def main():
             api_version=args.api_version,
             temperature=args.temperature,
             azure_endpoint=args.azure_endpoint
+        )
+    elif args.llm == "openrouter":
+        llm = ChatOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=args.api_key,
+            model=args.api_model,
+            temperature=args.temperature
+        )
+    elif args.llm == "gemini":
+        #genai.configure(api_key=args.api_key)
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        llm = ChatGoogleGenerativeAI(
+            model=args.api_model,
+            api_key=args.api_key,
+            temperature=args.temperature,
+            convert_system_message_to_human=True
         )
 
     # Save Result file
