@@ -427,13 +427,13 @@ def print_message(json_object, save_dir=None):
     remove_b64code_obj = []
     for obj in json_object:
         if obj['role'] != 'user':
-            # print(obj)
-            logging.info(obj)
+            # 使用 str() 而非直接記錄物件，避免編碼問題
+            logging.info(str(obj))
             remove_b64code_obj.append(obj)
         else:
             if type(obj['content']) == str:
-                # print(obj)
-                logging.info(obj)
+                # 使用 str() 而非直接記錄物件，避免編碼問題
+                logging.info(str(obj))
                 remove_b64code_obj.append(obj)
             else:
                 print_obj = {
@@ -443,8 +443,16 @@ def print_message(json_object, save_dir=None):
                 for item in print_obj['content']:
                     if item['type'] == 'image_url':
                         item['image_url'] =  {"url": "data:image/png;base64,{b64_img}"}
-                # print(print_obj)
-                logging.info(print_obj)
+                
+                # 將物件轉換為 JSON 字串，並設置 ensure_ascii=False 以保留 Unicode 字符
+                try:
+                    # 使用 json.dumps 以支援 Unicode，確保記錄可以正確顯示
+                    log_str = json.dumps(print_obj, ensure_ascii=False)
+                    logging.info(log_str)
+                except Exception as e:
+                    logging.warning(f"無法序列化訊息進行記錄: {str(e)}")
+                    logging.info("訊息內容無法記錄 (Unicode 問題)")
+                
                 remove_b64code_obj.append(print_obj)
     if save_dir:
         with open(os.path.join(save_dir, 'interact_messages.json'), 'w', encoding='utf-8') as fw:
