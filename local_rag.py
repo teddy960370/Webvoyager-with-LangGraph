@@ -170,7 +170,9 @@ def semantic_search(query: str, documents: List[Dict[str, Any]],
         index.add(embeddings_array)
         
         # 搜索
-        distances, indices = index.search(query_array, top_k)
+        # 確保 top_k 不超過可用文檔數量
+        actual_top_k = min(top_k, len(documents))
+        distances, indices = index.search(query_array, actual_top_k)
         
         # 返回前 K 個相關文檔
         return [documents[i] for i in indices[0]]
@@ -201,10 +203,13 @@ def extract_document_content(doc: Dict[str, Any]) -> str:
         markdown_content = re.sub(r'^\s*[-*+]\s+', '', markdown_content, flags=re.MULTILINE)
         return markdown_content.strip()
     
-    # 合併所有可能包含內容的欄位
-    for key in ["content", "instruction", "input", "output", "ques", "ans", "text"]:
-        if key in doc and isinstance(doc[key], str):
-            content += doc[key] + " "
+    elif doc.get("type") in ["json", "jsonl"]:
+        content = json.dumps(doc, ensure_ascii=False)
+    else:
+        # 合併所有可能包含內容的欄位
+        for key in ["content", "instruction", "input", "output", "ques", "ans", "text"]:
+            if key in doc and isinstance(doc[key], str):
+                content += doc[key] + " "
     
     return content.strip()
 
@@ -220,6 +225,57 @@ def format_document_context(doc: Dict[str, Any]) -> str:
     if doc.get("type") == "markdown" and "content" in doc:
         # 為 Markdown 文檔提供更好的格式
         context += f"{doc['content']}\n\n"
+    elif doc.get("type") in ["json", "jsonl"]:
+        # 處理 JSON 格式，特別是網頁操作記錄
+        if "task_description" in doc and "actions" in doc:
+            # 添加任務描述
+            context += f"### Web Task: {doc['task_description']}\n"
+
+            # 添加序列範圍信息（如果存在）
+            if "sequence_range" in doc:
+                context += f"**Actions Sequence**: {doc['sequence_range']}\n"
+            
+            # 添加操作序列
+            context += "\n**Actions**:\n"
+            
+            for action in doc.get("actions", []):
+                action_type = action.get("type", "")
+                order = action.get("order", "")
+                
+                if action_type == "Navigate":
+                    url = action.get("url", "")
+                    title = action.get("page_title", "")
+                    context += f"- [{order}] Navigate to {url} ({title})\n"
+                    
+                elif action_type == "Click":
+                    element_info = action.get("element_info", {})
+                    element_text = action.get("elements_text", "")
+                    tag = element_info.get("tagName", "")
+                    text = element_info.get("text", "")
+                    context += f"- [{order}] Click {tag}: {text or element_text}\n"
+                    
+                elif action_type == "Type":
+                    input_value = action.get("input_value", "")
+                    element_text = action.get("elements_text", "")
+                    context += f"- [{order}] Type: {input_value or element_text}\n"
+                    
+                elif action_type == "answer":
+                    element_text = action.get("elements_text", "")
+                    context += f"- [{order}] Complete: {element_text}\n"
+                    
+                else:
+                    context += f"- [{order}] {action_type}\n"
+        else:
+            # 對於其他JSON格式，嘗試優雅地序列化
+            try:
+                # 移除type和source等RAG系統添加的字段
+                display_doc = {k: v for k, v in doc.items() if k not in ["type", "source", "chunk_id", "total_chunks"]}
+                import json
+                context += json.dumps(display_doc, ensure_ascii=False, indent=2)
+                context += "\n"
+            except:
+                # 如果序列化失敗，嘗試直接使用字符串表示
+                context += str(doc) + "\n"
     elif "ques" in doc and "ans" in doc:
         context += f"Question: {doc['ques']}\nAnswer: {doc['ans']}\n\n"
     elif "instruction" in doc and "output" in doc:
@@ -584,7 +640,8 @@ def get_retriever_context(task: str, domain: str , webName : str, llm, print_ans
         print("Start to get retriever context")
         
         # 加載知識庫文檔 - 從 data/markdown 目錄
-        knowledge_base_path = f"data/markdown/{webName}"
+        #knowledge_base_path = f"data/markdown/{webName}"
+        knowledge_base_path = f"data/actionRecoder/{webName}"
         all_documents = load_knowledge_documents(knowledge_base_path)
         
         if not all_documents:
