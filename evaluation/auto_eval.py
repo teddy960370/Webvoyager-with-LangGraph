@@ -42,6 +42,18 @@ You should explicitly explain the reasoning behind your final evaluation before 
 {
   "thought": "Your detailed reasoning. Briefly summarize the evidence from the Screenshot, Result Response, and Operation Trace, and explain your analysis.",
   "answer": "SUCCESS or NOT SUCCESS"
+  "steps": [
+    { 
+        "Step": 1,
+        "action": "The action taken in this step from operation Trace."
+    },
+    {   
+        "Step": 2,
+        "action": "The action taken in this step from operation Trace."
+    },
+
+
+  ]
 }
 
 ---
@@ -91,7 +103,8 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
             'reason': 'Only system messages found, no assistant response',
             'task_question': 'Task information not found',
             'answer': '' , # 新增空的 answer 欄位
-            'step_count': 0
+            'step_count': 0,
+            'steps': []
         }
 
     task_info = it_messages[1]["content"]
@@ -115,7 +128,8 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
             'reason': 'No final answer found in the conversation',
             'task_question': task_question,
             'answer': '',  # 新增空的 answer 欄位
-            'step_count' : img_num
+            'step_count' : img_num,
+            'steps': []
         }
     pattern_ans = r"ANSWER[:; ]+\[?(.[^\]]*)\]?"
     matches_ans = re.search(pattern_ans, ans_info)
@@ -210,7 +224,8 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
             'reason': 'Content policy violation',
             'task_question': task_question,
             'answer': answer_content,
-            'step_count': step_count
+            'step_count': step_count,
+            'steps': []
         }
     
     gpt_4v_res = response.content
@@ -240,6 +255,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
         # 從JSON中提取結果
         thought = result_json.get('thought', '')
         answer = result_json.get('answer', '')
+        steps = result_json.get('steps', [])
         
         # 確定成功或失敗
         auto_eval_res = 'SUCCESS' if answer.upper() == 'SUCCESS' else 'NOT SUCCESS'
@@ -252,7 +268,8 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
             'reason': thought,
             'task_question': task_question,
             'answer': answer_content,
-            'step_count': step_count
+            'step_count': step_count,
+            'steps': steps
         }
     except Exception as e:
         print(f"Error parsing JSON response: {e}")
@@ -393,7 +410,7 @@ def main():
                     'Result': eval_result['result'],
                     'Answer': eval_result['answer'],  # 新增 answer 欄位
                     'Reason': eval_result['reason'],
-                    'Steps': eval_result['step_count']
+                    'Steps': eval_result['steps']
                 }
                 web_task_res.append(result_dict)
                 all_results.append(result_dict)
@@ -404,7 +421,16 @@ def main():
                 print(f"Answer: {eval_result['answer']}")
                 print(f"Result: {eval_result['result']}")
                 print(f"Reason: {eval_result['reason']}\n")
-        
+
+
+                # save results as json file
+                knowledge_dir = f"./data/{web}"
+                if not os.path.exists(knowledge_dir):
+                    os.makedirs(knowledge_dir)
+                fileName = f"task{web}--{idx}_{eval_result['result']}_eval.json"
+                with open(os.path.join(knowledge_dir, fileName), 'w', encoding='utf-8') as f:
+                    json.dump(result_dict, f, ensure_ascii=False, indent=4)
+
         if web_task_res:
             total_tasks = len(web_task_res)
             successful_tasks = sum(1 for res in web_task_res if res['Result'] == 'SUCCESS')
@@ -413,6 +439,9 @@ def main():
 
     # 儲存所有評估結果
     save_evaluation_results(args.process_dir, all_results)
+
+    
+
 
 if __name__ == '__main__':
     main()
