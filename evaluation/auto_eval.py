@@ -8,7 +8,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
-from openai import OpenAI,AzureOpenAI
+from langchain_openai import AzureOpenAI,OpenAI,AzureChatOpenAI,ChatOpenAI
 
 SYSTEM_PROMPT = """As an evaluator, you will be presented with four primary components to assist you in your role:
 
@@ -37,19 +37,20 @@ You should explicitly explain the reasoning behind your final evaluation before 
 
 ---
 
-**Your reply should strictly follow this format**:
+**Your reply MUST be in valid JSON format with the following structure**:
 
-```
-Thought: {Your detailed reasoning. Briefly summarize the evidence from the Screenshot, Result Response, and Operation Trace, and explain your analysis.}
-ANSWER: {'SUCCESS' or 'NOT SUCCESS'}
-```
+{
+  "thought": "Your detailed reasoning. Briefly summarize the evidence from the Screenshot, Result Response, and Operation Trace, and explain your analysis.",
+  "answer": "SUCCESS or NOT SUCCESS"
+}
 
 ---
 
 # Notes
 
 - Ensure each component (instruction, screenshots, result response, and operation trace) is considered in your reasoning before reaching a conclusion.
-- Pay special attention to whether **all parts** of the Web Task Instruction have been completed as specified."""
+- Pay special attention to whether **all parts** of the Web Task Instruction have been completed as specified.
+- You must only respond with valid JSON in the exact format specified above."""
 USER_PROMPT = """TASK: <task>
 Result Response: <answer>
 Operation Trace:
@@ -73,23 +74,24 @@ def extract_assistant_process(messages):
                 action = content.split("Action:")[1].strip()
                 assistant_responses.append(f"Step {step}:\nThought: {thought}\nAction: {action}")
                 step += 1
-    return "\n\n".join(assistant_responses)
+    return "\n\n".join(assistant_responses) , step
 
 
-def auto_eval_by_gpt4v(process_dir, openai_client, api_model, img_num):
+def auto_eval_by_gpt4v(process_dir, llm, img_num):
     print(f'--------------------- {process_dir} ---------------------')
     res_files = sorted(os.listdir(process_dir))
     with open(os.path.join(process_dir, 'interact_messages.json'), encoding='utf-8') as fr:
         it_messages = json.load(fr)
 
-    if len(it_messages) == 1:
+    if len(it_messages) <= 1:
         print('Not find answer for ' + process_dir + ' only system messages')
         print()
         return {
             'result': 'NOT SUCCESS',
             'reason': 'Only system messages found, no assistant response',
             'task_question': 'Task information not found',
-            'answer': ''  # 新增空的 answer 欄位
+            'answer': '' , # 新增空的 answer 欄位
+            'step_count': 0
         }
 
     task_info = it_messages[1]["content"]
@@ -112,14 +114,15 @@ def auto_eval_by_gpt4v(process_dir, openai_client, api_model, img_num):
             'result': 'NOT SUCCESS',
             'reason': 'No final answer found in the conversation',
             'task_question': task_question,
-            'answer': ''  # 新增空的 answer 欄位
+            'answer': '',  # 新增空的 answer 欄位
+            'step_count' : img_num
         }
     pattern_ans = r"ANSWER[:; ]+\[?(.[^\]]*)\]?"
     matches_ans = re.search(pattern_ans, ans_info)
     answer_content = matches_ans.group(1).strip()
 
     # Extract assistant's thought process
-    assistant_process = extract_assistant_process(it_messages)
+    assistant_process , step_count = extract_assistant_process(it_messages)
 
     # max_screenshot_id = max([int(f[10:].split('.png')[0]) for f in os.listdir(process_dir) if '.png' in f])
     # final_screenshot = f'screenshot{max_screenshot_id}.png'
@@ -127,6 +130,13 @@ def auto_eval_by_gpt4v(process_dir, openai_client, api_model, img_num):
     whole_content_img = []
     pattern_png = r'screenshot(\d+)\.png'
     matches = [(filename, int(re.search(pattern_png, filename).group(1))) for filename in res_files if re.search(pattern_png, filename)]
+    
+    try :
+        assert len(matches)  == step_count
+    except AssertionError as e:
+        print(f"Mismatch between number of screenshots and steps in the assistant process: {e}")
+
+
     matches.sort(key=lambda x: x[1])
     end_files = matches[-img_num:]
     for png_file in end_files:
@@ -157,13 +167,19 @@ def auto_eval_by_gpt4v(process_dir, openai_client, api_model, img_num):
         policyError = False
         try:
             print('Calling gpt4v API to get the auto evaluation......')
-            openai_response = openai_client.chat.completions.create(
-                model=api_model, messages=messages, max_tokens=1000, seed=42, temperature=0
+            # 添加response_format參數強制JSON輸出
+            response = llm.invoke(
+                messages,
+                response_format={"type": "json_object"}
             )
-            print('Prompt Tokens:', openai_response.usage.prompt_tokens, ';',
-                  'Completion Tokens:', openai_response.usage.completion_tokens)
-            print('Cost:', openai_response.usage.prompt_tokens/1000 * 0.01
-                  + openai_response.usage.completion_tokens / 1000 * 0.03)
+            token_usage = response.response_metadata.get('token_usage', {})
+            prompt_tokens = token_usage.get('prompt_tokens', 0)
+            completion_tokens = token_usage.get('completion_tokens', 0)
+
+            print('Prompt Tokens:', prompt_tokens, ';',
+                  'Completion Tokens:', completion_tokens)
+            print('Cost:', prompt_tokens/1000 * 0.01
+                  + completion_tokens / 1000 * 0.03)
 
             print('API call complete...')
             break
@@ -174,49 +190,73 @@ def auto_eval_by_gpt4v(process_dir, openai_client, api_model, img_num):
             elif type(e).__name__ == 'APIError':
                 time.sleep(15)
             elif type(e).__name__ == 'InvalidRequestError':
-                exit(0)
+                # 嘗試不使用response_format參數再試一次
+                try:
+                    print('Retrying without response_format parameter...')
+                    response = llm.invoke(messages)
+                    break
+                except:
+                    exit(0)
             elif "ResponsibleAIPolicyViolation" in str(e) and "content_filter" in str(e):
                 print("Content ResponsibleAIPolicyViolation triggered. Breaking out of the loop.")
                 policyError = True
                 break
             else:
                 time.sleep(10)
+                
     if policyError:
-        gpt_4v_res = "policyError"
-        eval_reason = "Content policy violation"
-    else:
-        gpt_4v_res = openai_response.choices[0].message.content
-        # 分離評估原因和結果
-        eval_reason = gpt_4v_res.split("ANSWER:")[0].strip() if "ANSWER:" in gpt_4v_res else gpt_4v_res
-        
+        return {
+            'result': 'NOT SUCCESS',
+            'reason': 'Content policy violation',
+            'task_question': task_question,
+            'answer': answer_content,
+            'step_count': step_count
+        }
+    
+    gpt_4v_res = response.content
     print_message = messages[1]
     for idx in range(len(print_message['content'])):
         if print_message['content'][idx]['type'] == 'image_url':
             print_message['content'][idx]['image_url'] = {"url": "data:image/png;base64, b64_img"}
 
-    # print_message[1]['content'][1]['image_url'] = {"url": "data:image/png;base64, b64_img"}
-    print(print_message)
-    print(gpt_4v_res)
+    #print(print_message)
+    #print(gpt_4v_res)
 
-    #auto_eval_res = 0 if 'NOT SUCCESS' in gpt_4v_res else 1
-    #if 'SUCCESS' not in gpt_4v_res:
-    #    auto_eval_res = None
-
-    if gpt_4v_res == "policyError" :
-        auto_eval_res = 'NOT SUCCESS'
-    elif 'NOT SUCCESS' in gpt_4v_res:
-        auto_eval_res = 'NOT SUCCESS'
-    else:
-        auto_eval_res = 'SUCCESS'
-    print('Auto_eval_res:', auto_eval_res)
-    print('Evaluation Reason:', eval_reason)
-    
-    return {
-        'result': auto_eval_res,
-        'reason': eval_reason,
-        'task_question': task_question,
-        'answer': answer_content  # 新增回傳 answer_content
-    }
+    # 使用新的JSON解析邏輯
+    try:
+        # 嘗試解析JSON回應
+        if isinstance(gpt_4v_res, dict):
+            # 如果已經是字典，直接使用
+            result_json = gpt_4v_res
+        else:
+            # 如果是字符串，嘗試提取JSON部分
+            json_match = re.search(r'```json\s*(.*?)\s*```', gpt_4v_res, re.DOTALL)
+            if json_match:
+                result_json = json.loads(json_match.group(1))
+            else:
+                # 嘗試直接解析整個字符串
+                result_json = json.loads(gpt_4v_res)
+        
+        # 從JSON中提取結果
+        thought = result_json.get('thought', '')
+        answer = result_json.get('answer', '')
+        
+        # 確定成功或失敗
+        auto_eval_res = 'SUCCESS' if answer.upper() == 'SUCCESS' else 'NOT SUCCESS'
+        
+        print('Auto_eval_res:', auto_eval_res)
+        print('Evaluation Reason:', thought)
+        
+        return {
+            'result': auto_eval_res,
+            'reason': thought,
+            'task_question': task_question,
+            'answer': answer_content,
+            'step_count': step_count
+        }
+    except Exception as e:
+        print(f"Error parsing JSON response: {e}")
+        return
 
 def save_evaluation_results(process_dir, results_by_website):
     """
@@ -236,7 +276,7 @@ def save_evaluation_results(process_dir, results_by_website):
     ws_details.title = "Detailed Results"
     
     # 設定欄位
-    headers = ['Website', 'Task_ID', 'Task_Question', 'Result', 'Answer', 'Reason']
+    headers = ['Website', 'Task_ID', 'Task_Question', 'Result', 'Answer', 'Reason' , 'Steps']
     for col, header in enumerate(headers, 1):
         ws_details.cell(row=1, column=col, value=header)
         # 設定欄寬
@@ -249,15 +289,16 @@ def save_evaluation_results(process_dir, results_by_website):
     
     # 建立準確率統計工作表
     ws_accuracy = wb.create_sheet("Accuracy Statistics")
-    ws_accuracy.append(['Website', 'Total Tasks', 'Successful Tasks', 'No Answer Tasks', 'Wrong Answer Tasks', 'Accuracy'])
+    ws_accuracy.append(['Website', 'Total Tasks', 'Successful Tasks', 'No Answer Tasks', 'Wrong Answer Tasks', 'Step(Avg.)', 'Accuracy'])
     
     # 計算每個網站的準確率和各類任務數量
     website_stats = {}
     for result in results_by_website:
         website = result['Website']
         if website not in website_stats:
-            website_stats[website] = {'total': 0, 'success': 0, 'no_answer': 0, 'wrong_answer': 0}
+            website_stats[website] = {'total': 0, 'success': 0, 'no_answer': 0, 'wrong_answer': 0 , 'total_steps': 0}
         website_stats[website]['total'] += 1
+        website_stats[website]['total_steps'] += result['Steps']
         if result['Result'] == 'SUCCESS':
             website_stats[website]['success'] += 1
         elif result['Result'] == 'NOT SUCCESS' and result['Reason'] == 'No final answer found in the conversation':
@@ -268,12 +309,15 @@ def save_evaluation_results(process_dir, results_by_website):
         # 計算Wrong Answer = Total - Success - No Answer
         stats['wrong_answer'] = stats['total'] - stats['success'] - stats['no_answer']
         accuracy = stats['success'] / stats['total'] if stats['total'] > 0 else 0
+        # 計算平均步驟數
+        avg_steps = stats['total_steps'] / stats['total'] if stats['total'] > 0 else 0
         ws_accuracy.append([
             website,
             stats['total'],
             stats['success'],
             stats['no_answer'],
             stats['wrong_answer'],
+            f"{avg_steps:.2f}",
             f"{accuracy:.2%}"
         ])
     
@@ -294,17 +338,41 @@ def main():
     parser.add_argument("--max_attached_imgs", type=int, default=1)
     parser.add_argument("--azure_endpoint", type=str, default="")
     parser.add_argument("--api_version", type=str, default="")
-    parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure"])
+    parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for the LLM response")
+    parser.add_argument("--seed", type=int, default=42, help="Seed for random number generation")
+    parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure", "openrouter", "gemini"])
 
     args = parser.parse_args()
 
     if args.llm == "openai":
-        client = OpenAI(api_key=args.api_key)
+        llm = ChatOpenAI(
+            api_key=args.api_key,
+            model=args.api_model,
+            temperature=args.temperature
+        )
     elif args.llm == "azure":
-        client = AzureOpenAI(
-            azure_endpoint = args.azure_endpoint, 
-            api_key = args.api_key,  
-            api_version = args.api_version
+        llm = AzureChatOpenAI(
+            api_key=args.api_key,
+            model=args.api_model,
+            api_version=args.api_version,
+            temperature=args.temperature,
+            azure_endpoint=args.azure_endpoint
+        )
+    elif args.llm == "openrouter":
+        llm = ChatOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=args.api_key,
+            model=args.api_model,
+            temperature=args.temperature
+        )
+    elif args.llm == "gemini":
+        #genai.configure(api_key=args.api_key)
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        llm = ChatGoogleGenerativeAI(
+            model=args.api_model,
+            api_key=args.api_key,
+            temperature=args.temperature,
+            convert_system_message_to_human=True
         )
 
     all_results = []  # 儲存所有網站的評估結果
@@ -317,14 +385,15 @@ def main():
         for idx in range(0, 46):
             file_dir = os.path.join(args.process_dir, 'task'+web+'--'+str(idx))
             if os.path.exists(file_dir):
-                eval_result = auto_eval_by_gpt4v(file_dir, client, args.api_model, args.max_attached_imgs)
+                eval_result = auto_eval_by_gpt4v(file_dir, llm, args.max_attached_imgs)  # 修正參數從client到llm
                 result_dict = {
                     'Website': web,
                     'Task_ID': idx,
                     'Task_Question': eval_result['task_question'],
                     'Result': eval_result['result'],
                     'Answer': eval_result['answer'],  # 新增 answer 欄位
-                    'Reason': eval_result['reason']
+                    'Reason': eval_result['reason'],
+                    'Steps': eval_result['step_count']
                 }
                 web_task_res.append(result_dict)
                 all_results.append(result_dict)
