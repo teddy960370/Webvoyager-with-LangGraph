@@ -302,7 +302,12 @@ def save_evaluation_results(process_dir, results_by_website):
     # 寫入詳細結果
     for row, result in enumerate(results_by_website, 2):
         for col, header in enumerate(headers, 1):
-            ws_details.cell(row=row, column=col, value=result[header])
+            if header == 'Steps':
+                # 將步驟列表轉換為字符串
+                steps_str = '\n'.join([f"Step {step['Step']}: {step['action']}" for step in result['Steps']])
+                ws_details.cell(row=row, column=col, value=steps_str)
+            else:
+                ws_details.cell(row=row, column=col, value=result[header])
     
     # 建立準確率統計工作表
     ws_accuracy = wb.create_sheet("Accuracy Statistics")
@@ -315,7 +320,7 @@ def save_evaluation_results(process_dir, results_by_website):
         if website not in website_stats:
             website_stats[website] = {'total': 0, 'success': 0, 'no_answer': 0, 'wrong_answer': 0 , 'total_steps': 0}
         website_stats[website]['total'] += 1
-        website_stats[website]['total_steps'] += result['Steps']
+        website_stats[website]['total_steps'] += len(result['Steps'])  # 累計步驟數
         if result['Result'] == 'SUCCESS':
             website_stats[website]['success'] += 1
         elif result['Result'] == 'NOT SUCCESS' and result['Reason'] == 'No final answer found in the conversation':
@@ -438,6 +443,7 @@ def main():
             print(f'{web} Accuracy: {accuracy:.2%}')
 
     # 儲存所有評估結果
+
     save_evaluation_results(args.process_dir, all_results)
 
     

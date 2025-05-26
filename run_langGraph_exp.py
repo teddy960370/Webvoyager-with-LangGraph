@@ -105,7 +105,7 @@ def setup_environment(args):
     return result_dir
 
 
-def GetRetrieverContext(ragConfig ,Task , Domain ,webName, print_answer = False) -> Dict[str, Any]:
+def GetRetrieverContext(llm ,Task , Domain ,webName, print_answer = False) -> Dict[str, Any]:
     """
     獲取檢索結果作為任務上下文
     
@@ -117,11 +117,8 @@ def GetRetrieverContext(ragConfig ,Task , Domain ,webName, print_answer = False)
     if Task is None or Domain is None:
         return None
         
-    # 使用本地 RAG 模組獲取上下文
-    # 注意：我們需要從 ragConfig 中提取 LLM 實例
-    llm = None
-    if hasattr(ragConfig, 'llm'):
-        llm = ragConfig.llm
+    # 使用 ChromaDB 獲取上下文
+    #from chroma_rag import get_retriever_context
     
     # 調用優化後的檢索函數
     context = get_retriever_context(Task, Domain, webName, llm, print_answer)
@@ -178,16 +175,10 @@ def launchBrowser(state: State):
     state["download_files"] = []
     state["iteration"] = 0
 
-    # 初始化RagFlow API配置，但使用本地 RAG
-    ragFlowConfig = type('RagConfig', (), {
-        'base_url': args.ragFlow_url,
-        'chat_id': args.ragFlow_chat_id,
-        'api_key': args.ragFlow_api_key,
-        'llm': state["llm"]  # 傳遞 LLM 實例給 local_rag
-    })
+    state["RetrieverContext"] = "No data available."
+    if args.use_rag:
+        state["RetrieverContext"] = GetRetrieverContext(state["llm"], task['ques'], task['web'],task['web_name'])
 
-    state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig, task['ques'], task['web'],task['web_name'])
-    #state["RetrieverContext"] = None
     return state
 
 def format_observation(state: State):
@@ -547,7 +538,7 @@ def action(state: State):
     
     return state
 
-def has_answer(state: State) -> Literal["action", "answer"]:
+def has_answer(state: State) -> Literal["action", "eval"]:
     
     #if not state["current_response"]:
     #    return "action"
@@ -556,7 +547,7 @@ def has_answer(state: State) -> Literal["action", "answer"]:
     if state["iteration"] >= state["args"].max_iter:
         logging.info("Reached maximum iterations, forcing answer...")
         state["current_response"] = "Thought: Maximum iterations reached.\nAction: ANSWER; 'Task could not be completed within the maximum allowed iterations.'"
-        return "answer"
+        return "eval"
 
     response = state["current_response"]
     try:
@@ -602,8 +593,16 @@ def eval(state: State):
         'Result': result['result'],
         'Answer': result['answer'],  # 新增 answer 欄位
         'Reason': result['reason'],
-        'Steps': result['step_count']
+        'Steps': result['steps']
     }
+
+    # save results as json file
+    knowledge_dir = f"./data/{task['web_name']}"
+    if not os.path.exists(knowledge_dir):
+        os.makedirs(knowledge_dir)
+    fileName = f"task{task['web_name']}--{task['id']}_{result['result']}_eval.json"
+    with open(os.path.join(knowledge_dir, fileName), 'w', encoding='utf-8') as f:
+        json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
     state["eval_result"] = result_dict
 
@@ -709,9 +708,7 @@ def main():
     parser.add_argument("--fix_box_color", action='store_true')
     parser.add_argument("--azure_endpoint", type=str, default="")
     parser.add_argument("--api_version", type=str, default="")
-    parser.add_argument("--ragFlow_url", type=str, default="")
-    parser.add_argument("--ragFlow_chat_id", type=str, default="")
-    parser.add_argument("--ragFlow_api_key", type=str, default="")
+    parser.add_argument("--use_rag", type=bool, default=False, help="Use RAG to get context for the task")
     parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure","openrouter","gemini"])
     parser.add_argument("--som_scan_all", type=bool, default=False)
 
@@ -772,7 +769,7 @@ def main():
     workflow.add_node("action", action)
     #workflow.add_node("answer", answer)
     workflow.add_node("eval", eval)
-    workflow.add_node("WebRecoder", launch_webRecoder)
+    #workflow.add_node("WebRecoder", launch_webRecoder)
 
     # Add edges
     workflow.add_edge(START, "launchBrowser")
@@ -787,21 +784,21 @@ def main():
         }
     )
     workflow.add_edge("action", "observation")  # action 完成後回到 observation
-    workflow.add_conditional_edges(
-        "eval",
-        is_success,
-        {
-            "Success": END,
-            "NotSuccess": "WebRecoder"
-        }
-    )
-    workflow.add_edge("WebRecoder", 'launchBrowser')
-    
+    #workflow.add_conditional_edges(
+    #    "eval",
+    #    is_success,
+    #    {
+    #        "Success": END,
+    #        "NotSuccess": "WebRecoder"
+    #    }
+    #)
+    #workflow.add_edge("WebRecoder", 'launchBrowser')
+    workflow.add_edge("eval", END)
     # Compile and run
     graph = workflow.compile()
 
-    image = graph.get_graph().draw_mermaid_png()
-    showImage(image)
+    #image = graph.get_graph().draw_mermaid_png()
+    #showImage(image)
 
     eval_results = []
 
@@ -843,7 +840,7 @@ def main():
             
             # If the task completed successfully, add its evaluation results to the overall results
             if 'eval_result' in final_state and final_state['eval_result']:
-                eval_results.extend(final_state['eval_result'])
+                eval_results.append(final_state['eval_result'])
             
             logging.info(f"Task {task['id']} completed successfully")
         except Exception as e:
