@@ -102,7 +102,7 @@ def setup_environment(args):
     return result_dir
 
 
-def GetRetrieverContext(ragConfig ,Task , Domain ,webName, print_answer = False) -> Dict[str, Any]:
+def GetRetrieverContext(llm, Task, Domain, webName, print_answer=False) -> Dict[str, Any]:
     """
     獲取檢索結果作為任務上下文
     
@@ -113,13 +113,7 @@ def GetRetrieverContext(ragConfig ,Task , Domain ,webName, print_answer = False)
     # 如果沒有配置或任務資訊不完整，直接返回 None
     if Task is None or Domain is None:
         return None
-        
-    # 使用本地 RAG 模組獲取上下文
-    # 注意：我們需要從 ragConfig 中提取 LLM 實例
-    llm = None
-    if hasattr(ragConfig, 'llm'):
-        llm = ragConfig.llm
-    
+
     # 調用優化後的檢索函數
     context = get_retriever_context(Task, Domain, webName, llm, print_answer)
     
@@ -167,15 +161,9 @@ def launchBrowser(state: State):
     state["download_files"] = []
     state["iteration"] = 0
 
-    # 初始化RagFlow API配置，但使用本地 RAG
-    ragFlowConfig = type('RagConfig', (), {
-        'base_url': args.ragFlow_url,
-        'chat_id': args.ragFlow_chat_id,
-        'api_key': args.ragFlow_api_key,
-        'llm': state["llm"]  # 傳遞 LLM 實例給 local_rag
-    })
-
-    #state["RetrieverContext"] = GetRetrieverContext(ragFlowConfig, task['ques'], task['web'],task['web_name'])
+    state["RetrieverContext"] = "No data available."
+    if args.use_rag:
+        state["RetrieverContext"] = GetRetrieverContext(state["llm"], task['ques'], task['web'],task['web_name'])
     #state["RetrieverContext"] = None
     return state
 
@@ -651,11 +639,9 @@ def main():
     parser.add_argument("--fix_box_color", action='store_true')
     parser.add_argument("--azure_endpoint", type=str, default="")
     parser.add_argument("--api_version", type=str, default="")
-    parser.add_argument("--ragFlow_url", type=str, default="")
-    parser.add_argument("--ragFlow_chat_id", type=str, default="")
-    parser.add_argument("--ragFlow_api_key", type=str, default="")
     parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure","openrouter","gemini"])
     parser.add_argument("--som_scan_all", type=bool, default=False)
+    parser.add_argument("--use_rag", type=bool, default=False, help="Use RAG to get context for the task")
 
     args = parser.parse_args()
 
