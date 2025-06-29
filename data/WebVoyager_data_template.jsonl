@@ -93,7 +93,7 @@
 {"web_name": "Apple", "id": "Apple--6", "ques": "Find AirPods on Apple and how many types are currently available.", "web": "https://www.apple.com/"}
 {"web_name": "Apple", "id": "Apple--7", "ques": "When and where the Apple Vision Pro will be released.", "web": "https://www.apple.com/"}
 {"web_name": "Apple", "id": "Apple--8", "ques": "Identify and list the specifications of the latest iPad model released by Apple, including its storage options, processor type, and display features.", "web": "https://www.apple.com/"}
-{"web_name": "Apple", "id": "Apple--9", "ques": "Check the Apple Store for the availability of the latest iPhone model and schedule an in-store pickup at the nearest Apple Store for January 10, 2024.", "web": "https://www.apple.com/"}
+{"web_name": "Apple", "id": "Apple--9", "ques": "Check the Apple Store for the availability of the latest iPhone model and schedule an in-store pickup at the nearest Apple Store for YYYY_MM_DD_TEMPLATE.", "web": "https://www.apple.com/"}
 {"web_name": "Apple", "id": "Apple--10", "ques": "Find information on the latest (as of today's date) MacBook model, including its key features such as processor type, memory size, and storage capacity.", "web": "https://www.apple.com/"}
 {"web_name": "Apple", "id": "Apple--11", "ques": "Get information about the latest iPad model released by Apple, including its release date, base storage capacity, and starting price available on Apple's official website.", "web": "https://www.apple.com/"}
 {"web_name": "Apple", "id": "Apple--12", "ques": "What Apple Repair ways are mentioned on apple website, answer 2 of them.", "web": "https://www.apple.com/"}
@@ -356,11 +356,11 @@
 {"web_name": "ESPN", "id": "ESPN--12", "ques": "The first three Top Headlines in the current ESPN home page correspond to which sports leagues?", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--13", "ques": "Identify today's top headline in the Basketball section of ESPN, and summarize the main points of that article.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--14", "ques": "Find the latest news about NBA trades or player movements on ESPN and report the most recent trade deal OR player acquisition.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--15", "ques": "Check the scores of the NBA games played on December 25, 2023.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--16", "ques": "Check the schedule for the NBA game on December 25, 2023, and provide the teams that are playing and their current standings in their respective conferences.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--17", "ques": "Check out the NBA Basketball Power Index 2023-24 to see which teams are in first place and which are in last place.", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--15", "ques": "Check the scores of the NBA games played on YYYY_MM_DD_TEMPLATE_PAST.", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--16", "ques": "Check the schedule for the NBA game on YYYY_MM_DD_TEMPLATE_PAST, and provide the teams that are playing and their current standings in their respective conferences.", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--17", "ques": "Check out the NBA Basketball Power Index YYYY_YY_TEMPLATE_PAST to see which teams are in first place and which are in last place.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--18", "ques": "How many sports leagues can you choose from on the ESPN home page?", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--19", "ques": "Who has the highest salary in Boston Celtics Roster 2023-24?", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--19", "ques": "Who has the highest salary in Boston Celtics Roster YYYY_YY_TEMPLATE_PAST?", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--20", "ques": "Look up the current leaders in rebounds and assists in the NBA Western Conference on ESPN.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--21", "ques": "Show the scores and main highlight of the Denver Nuggets game that occurred within the last 3 days on ESPN.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--22", "ques": "Find the latest Team transactions in the NBA within the past week.", "web": "https://www.espn.com/"}
@@ -371,15 +371,15 @@
 {"web_name": "ESPN", "id": "ESPN--27", "ques": "Search on ESPN for how many teams have 'Golden' in their name and how many of them are in the NHL.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--28", "ques": "How many MLB teams are there and list all the teams with 'City' in their name.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--29", "ques": "Identify today's top headline in the Soccer section of ESPN, and summarize the main points of that article.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--30", "ques": "Check out the NHL Standings 2023-24 on ESPN to see which teams are at the top and which are at the bottom in Eastern and Western Conference. What about the situation in Division.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--31", "ques": "Who has the heaviest weight among infielders in the New York Yankees Roster 2023-24?", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--30", "ques": "Check out the NHL Standings YYYY_YY_TEMPLATE_PAST on ESPN to see which teams are at the top and which are at the bottom in Eastern and Western Conference. What about the situation in Division.", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--31", "ques": "Who has the heaviest weight among infielders in the New York Yankees Roster YYYY_YY_TEMPLATE_PAST?", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--32", "ques": "Review yesterday's NHL game results on ESPN, focusing on teams' performance.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--33", "ques": "Locate the latest ESPN articles discussing potential MVP candidates in the NFL for 2023 season.", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--33", "ques": "Locate the latest ESPN articles discussing potential MVP candidates in the NFL for YYYY_TEMPLATE season.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--34", "ques": "Visit ESPN to view the Philadelphia 76ers' latest injuries.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--35", "ques": "Browse ESPN to find out when the next game of the Los Angeles Lakers will start. Then navigate to the ticket purchasing website from ESPN, what is the cheapest ticket available.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--36", "ques": "Search for Lionel Messi's last 5 games, which teams has he played for, and what are the results?", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--37", "ques": "Check out LeBron James' Stats to see how many games he has played in his career so far.", "web": "https://www.espn.com/"}
-{"web_name": "ESPN", "id": "ESPN--38", "ques": "Check Los Angeles Lakers Stats 2023-24, calculate Anthony Davis' games played (GP) percentage, tell me if there are other players with the same games played percentage as Anthony Davis.", "web": "https://www.espn.com/"}
+{"web_name": "ESPN", "id": "ESPN--38", "ques": "Check Los Angeles Lakers Stats YYYY_YY_TEMPLATE_PAST, calculate Anthony Davis' games played (GP) percentage, tell me if there are other players with the same games played percentage as Anthony Davis.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--39", "ques": "Check the New York Jets Depth Chart in the NFL section of ESPN and identify the players listed as injured in the 2ND position.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--40", "ques": "Browse the ESPN+ page from ESPN for a brief summary of what ESPN+ Tools is used for.", "web": "https://www.espn.com/"}
 {"web_name": "ESPN", "id": "ESPN--41", "ques": "Find out which four teams the NFC North contains in the NFL on ESPN.", "web": "https://www.espn.com/"}

@@ -4,6 +4,7 @@ import datetime
 import random
 import os
 import pandas as pd
+import argparse
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
 
@@ -35,17 +36,17 @@ class TimeTemplateReplacer:
         replaced_data = []
         
         # 定義正則表達式模式來匹配模板和可能的日期偏移
-        template_pattern = r'(YYYY_TEMPLATE|MM_TEMPLATE|DD_TEMPLATE|YYYY_MM_TEMPLATE|MM_DD_TEMPLATE|YYYY_MM_DD_TEMPLATE)([+-]\d+)?'
-        
+        template_pattern = r'(YYYY_MM_DD_TEMPLATE_PAST|YYYY_YY_TEMPLATE_PAST|YYYY_TEMPLATE|MM_TEMPLATE|DD_TEMPLATE|YYYY_MM_TEMPLATE|MM_DD_TEMPLATE|YYYY_MM_DD_TEMPLATE)([+-]\d+)?'
+
         for item in self.data:
             question = item.get('ques', '')
             
             # 檢查是否有任何模板匹配
             if re.search(template_pattern, question):
                 # 生成一個未來隨機天數作為基準日期
-                future_days = random.randint(min_days, max_days)
-                base_date = today + datetime.timedelta(days=future_days)
-                
+                random_count = random.randint(min_days, max_days)
+                base_date = today + datetime.timedelta(days=random_count)
+
                 # 找到所有模板匹配並替換
                 def replace_template(match):
                     template = match.group(1)
@@ -72,6 +73,14 @@ class TimeTemplateReplacer:
                         return final_date.strftime('%B %d')
                     elif template == 'YYYY_MM_DD_TEMPLATE':
                         return final_date.strftime('%B %d, %Y')
+                    elif template == 'YYYY_MM_DD_TEMPLATE_PAST':
+                        # 將日期設置為過去的日期
+                        past_date = today - datetime.timedelta(days=random_count)
+                        return past_date.strftime('%B %d, %Y')
+                    elif template == 'YYYY_YY_TEMPLATE_PAST':
+                        # 將日期設置為過去的日期
+                        this_year = today.year
+                        return str(this_year - 1) + '-' + str(this_year)[-2:]
                     return match.group(0)  # 如果無法識別模板，保持原樣
                 
                 # 使用正則表達式替換所有匹配項
@@ -86,21 +95,26 @@ class TimeTemplateReplacer:
 
 # 使用範例
 def main():
-    json_path = r"e:/碩士/論文/Webvoyager-with-LangGraph/data/test2_preprocessed.jsonl"
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_file', type=str, default='')
+    parser.add_argument('--output_file', type=str, default='')
+    parser.add_argument("--min_days", type=int, default=30)
+    parser.add_argument("--max_days", type=int, default=180)
+    parser.add_argument("--seed", type=int, default=42)
+
+    args = parser.parse_args()
+
+    json_path = args.input_file
     replacer = TimeTemplateReplacer(json_path)
     
     # 設定隨機種子以獲得可重現的結果
-    replaced_data = replacer.get_replaced_dates(seed=42)
-    
-    # 顯示原始問題和替換後的問題比較
-    print("原始問題 vs 替換後問題 (前5項):")
-    for i, (orig, replaced) in enumerate(zip(replacer.data[:5], replaced_data[:5])):
-        print(f"\n範例 {i+1}:")
-        print(f"原始: {orig['ques']}")
-        print(f"替換: {replaced['ques']}")
-    
+    replaced_data = replacer.get_replaced_dates(seed=args.seed , 
+                                                min_days=args.min_days, 
+                                                max_days=args.max_days)
+
     # 將結果保存為新的JSONL檔案
-    output_path = r"e:/碩士/論文/Webvoyager-with-LangGraph/data/test2_preprocessed_V2.jsonl"
+    output_path = args.output_file
     with open(output_path, 'w', encoding='utf-8') as f:
         for item in replaced_data:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
