@@ -8,7 +8,7 @@ import argparse
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
 
-class TimeTemplateReplacer:
+class TemplateReplacer:
     def __init__(self, json_path):
         self.json_path = json_path
         self.data = self._read_json()
@@ -24,8 +24,8 @@ class TimeTemplateReplacer:
                 data.append(json.loads(line))
         return data
 
-    def get_replaced_dates(self, seed=None, min_days=30, max_days=180):
-        """替換問題中的日期模板為未來半年內的隨機日期，支持日期偏移"""
+    def replaced_dates(self, seed=None, min_days=30, max_days=180):
+        """替換問題中的日期模板為未來半年內的隨機日期，以及替換Apple產品名稱"""
         if seed is not None:
             random.seed(seed)
         
@@ -86,12 +86,41 @@ class TimeTemplateReplacer:
                 # 使用正則表達式替換所有匹配項
                 question = re.sub(template_pattern, replace_template, question)
             
+            # 替換Apple產品名稱
+            question = self._replace_apple_production(question)
+            
             # 創建替換後的新項目
             new_item = item.copy()
             new_item['ques'] = question
             replaced_data.append(new_item)
         
         return replaced_data
+
+    def _replace_apple_production(self, text):
+        """替換問題中的Apple產品名稱"""
+        LAST_IPHONE = 'iPhone 16 pro'
+        LAST_IPHONE2 = 'iPhone 16'
+        LAST_IPHONE2_COLOR = 'Pink'
+        LAST_IPHONE3 = 'iPhone 15'
+        LAST_APPLE_WATCH = 'Series 10'
+        LAST_IOS_VERSION = 'iOS 18'
+        LAST_MACBOOK_CHIP = 'M4 Pro'
+        LAST_AIRPODS = 'AirPods (4th Generation)'
+        STORAGE = '256GB'
+
+        
+        text = text.replace("LAST_IPHONE2", LAST_IPHONE2)
+        text = text.replace("LAST_IPHONE2_COLOR", LAST_IPHONE2_COLOR)
+        text = text.replace("LAST_IPHONE3", LAST_IPHONE3)
+        text = text.replace("LAST_IPHONE", LAST_IPHONE)
+        text = text.replace("LAST_APPLE_WATCH", LAST_APPLE_WATCH)
+        text = text.replace("LAST_IOS_VERSION", LAST_IOS_VERSION)
+        text = text.replace("LAST_MACBOOK_CHIP", LAST_MACBOOK_CHIP)
+        text = text.replace("LAST_AIRPODS", LAST_AIRPODS)
+        text = text.replace("STORAGE", STORAGE)
+        
+        
+        return text
 
 # 使用範例
 def main():
@@ -106,12 +135,12 @@ def main():
     args = parser.parse_args()
 
     json_path = args.input_file
-    replacer = TimeTemplateReplacer(json_path)
+    replacer = TemplateReplacer(json_path)
     
-    # 設定隨機種子以獲得可重現的結果
-    replaced_data = replacer.get_replaced_dates(seed=args.seed , 
-                                                min_days=args.min_days, 
-                                                max_days=args.max_days)
+    # 設定隨機種子以獲得可重現的結果，同時替換日期和Apple產品名稱
+    replaced_data = replacer.replaced_dates(seed=args.seed, 
+                                            min_days=args.min_days, 
+                                            max_days=args.max_days)
 
     # 將結果保存為新的JSONL檔案
     output_path = args.output_file
