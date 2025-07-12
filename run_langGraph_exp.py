@@ -600,7 +600,8 @@ def eval(state: State):
     knowledge_dir = f"./data/{task['web_name']}"
     if not os.path.exists(knowledge_dir):
         os.makedirs(knowledge_dir)
-    fileName = f"task{task['web_name']}--{task['id']}_{result['result']}_eval.json"
+    timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    fileName = f"task{task['web_name']}--{task['id']}_{result['result']}_{timestamp}.json"
     with open(os.path.join(knowledge_dir, fileName), 'w', encoding='utf-8') as f:
         json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
@@ -611,21 +612,11 @@ def eval(state: State):
 def is_success(state: State) -> Literal["Success", "NotSuccess"]:
 
     eval_result = state["eval_result"]
-    if eval_result.get('Result') == 'Success':
+    if eval_result.get('Result') == 'Success' or state["args"].use_rag == True:
         return "Success"
+    
+    state["args"].use_rag = True 
     return "NotSuccess"
-
-def launch_webRecoder(state: State):
-
-    task = state["task"]
-    task_url = task['web']
-    task_domain = task['web_name']
-    task_ques = task['ques']
-
-    from WebRecoder.web_action_recorder import run
-    run(task_domain, task_url, task_ques)
-
-    return state
 
 def showImage(image):
     pil_image = PILImage.open(BytesIO(image))
@@ -767,9 +758,7 @@ def main():
     workflow.add_node("observation", format_observation)
     workflow.add_node("thoughts", thoughts)
     workflow.add_node("action", action)
-    #workflow.add_node("answer", answer)
     workflow.add_node("eval", eval)
-    #workflow.add_node("WebRecoder", launch_webRecoder)
 
     # Add edges
     workflow.add_edge(START, "launchBrowser")
@@ -784,16 +773,15 @@ def main():
         }
     )
     workflow.add_edge("action", "observation")  # action 完成後回到 observation
-    #workflow.add_conditional_edges(
-    #    "eval",
-    #    is_success,
-    #    {
-    #        "Success": END,
-    #        "NotSuccess": "WebRecoder"
-    #    }
-    #)
-    #workflow.add_edge("WebRecoder", 'launchBrowser')
-    workflow.add_edge("eval", END)
+    workflow.add_conditional_edges(
+        "eval",
+        is_success,
+        {
+            "Success": END,
+            "NotSuccess": "launchBrowser"
+        }
+    )
+
     # Compile and run
     graph = workflow.compile()
 

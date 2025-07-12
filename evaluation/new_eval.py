@@ -28,27 +28,25 @@ SYSTEM_PROMPT = """你是一個分析師，需要分析給定的任務是否成�
 
 # Output Format
 
-請將結果以 JSON 格式輸出，格式如下：
+你必須嚴格按照以下JSON格式輸出，不要添加任何額外的文本、說明或標記：
 
-```json
 {
   "thought": "你的詳細推理。簡要總結截圖、結果回應和操作記錄中的證據，並解釋你的分析。",
-  "answer": "'成功' 或 '未成功'",
+  "answer": "'SUCCESS' 或 'NOT SUCCESS'",
   "rules": [
     {
       "rule_id": "serial number",
       "type": "Success Process | Special Phenomena/Mechanism | Error discover and how fix",
       "rule": "a rule of the game you discovered"
-    },
-    ...
+    }
   ]
 }
-```
 
 # Notes
 
 - 每個 Web 任務指令的所有部分是否如規定完成是需要特別關注的點。
 - 不要與真實的網頁互動，也不要假設未提及的內容。
+- 請確保返回的是有效的JSON格式，不包含任何其他文本。
 """
 USER_PROMPT = """TASK: <task>
 Result Response: <answer>
@@ -149,7 +147,11 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
         policyError = False
         try:
             print('Calling gpt4v API to get the auto evaluation......')
-            response = llm.invoke(messages)
+            # 添加response_format參數來強制輸出JSON格式
+            response = llm.invoke(
+                messages,
+                response_format={"type": "json_object"}
+            )
             token_usage = response.response_metadata.get('token_usage', {})
             prompt_tokens = token_usage.get('prompt_tokens', 0)
             completion_tokens = token_usage.get('completion_tokens', 0)
@@ -168,7 +170,13 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
             elif type(e).__name__ == 'APIError':
                 time.sleep(15)
             elif type(e).__name__ == 'InvalidRequestError':
-                exit(0)
+                # 如果是格式問題，嘗試不使用response_format參數
+                try:
+                    print('Retrying without response_format parameter...')
+                    response = llm.invoke(messages)
+                    break
+                except:
+                    exit(0)
             elif "ResponsibleAIPolicyViolation" in str(e) and "content_filter" in str(e):
                 print("Content ResponsibleAIPolicyViolation triggered. Breaking out of the loop.")
                 policyError = True
@@ -183,7 +191,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
             'reason': 'Content policy violation',
             'task_question': task_question,
             'answer': answer_content,
-            'rules': []  # 空的rules
+            'rules': []
         }
     
     gpt_4v_res = response.content
@@ -195,17 +203,20 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
     print(print_message)
     print(gpt_4v_res)
     
-    # 嘗試解析JSON回應
+    # 解析JSON回應 - 改進的解析邏輯
     try:
-        # 從回應中提取JSON部分
-        json_match = re.search(r'```json\s*(.*?)\s*```', gpt_4v_res, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
+        # 如果回應是字符串，先嘗試直接解析
+        if isinstance(gpt_4v_res, str):
+            # 嘗試從可能的markdown格式中提取JSON
+            json_match = re.search(r'```json\s*(.*?)\s*```', gpt_4v_res, re.DOTALL)
+            if json_match:
+                result_json = json.loads(json_match.group(1))
+            else:
+                # 嘗試直接解析整個字符串
+                result_json = json.loads(gpt_4v_res)
         else:
-            # 如果沒有找到```json```格式，嘗試直接解析整個回應
-            json_str = gpt_4v_res
-            
-        result_json = json.loads(json_str)
+            # 如果已經是字典類型，直接使用
+            result_json = gpt_4v_res
         
         # 從JSON中提取結果
         thought = result_json.get('thought', '')
@@ -213,7 +224,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
         rules = result_json.get('rules', [])
         
         # 確定成功或失敗
-        result = 'NOT SUCCESS' if '不成功' in answer else 'SUCCESS'
+        result = 'NOT SUCCESS' if '不成功' in answer or '未成功' in answer else 'SUCCESS'
         
         return {
             'result': result,

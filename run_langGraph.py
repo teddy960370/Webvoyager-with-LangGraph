@@ -641,7 +641,7 @@ def main():
     parser.add_argument("--api_version", type=str, default="")
     parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure","openrouter","gemini"])
     parser.add_argument("--som_scan_all", type=bool, default=False)
-    parser.add_argument("--use_rag", type=bool, default=False, help="Use RAG to get context for the task")
+    parser.add_argument("--use_rag", action="store_true", default=False, help="Use RAG to get context for the task")
 
     args = parser.parse_args()
 

@@ -488,7 +488,7 @@ def preprocess_web_action_json(json_data: Dict[str, Any]) -> Dict[str, Any]:
     預處理網頁操作記錄 JSON 格式，過濾不重要的數據
     專門針對 web_actions_*.json 格式設計
     """
-    if not json_data or not isinstance(json_data, dict):
+    if not json_data or not isinstance(json_data, dict) or "task_description" not in json_data:
         return json_data
     
     # 創建一個新的預處理後的 JSON 對象，保留主要結構
@@ -639,9 +639,8 @@ def get_retriever_context(task: str, domain: str , webName : str, llm, print_ans
         
         print("Start to get retriever context")
         
-        # 加載知識庫文檔 - 從 data/markdown 目錄
-        #knowledge_base_path = f"data/markdown/{webName}"
-        knowledge_base_path = f"data/actionRecoder/{webName}"
+        # 加載知識庫文檔 - 從 AutoManual/results 目錄
+        knowledge_base_path = f"AutoManual/results/{webName}"
         all_documents = load_knowledge_documents(knowledge_base_path)
         
         if not all_documents:
@@ -649,8 +648,9 @@ def get_retriever_context(task: str, domain: str , webName : str, llm, print_ans
             return None
         
         # 對文檔進行結構化分塊
-        chunked_documents = chunk_documents(all_documents)
-        
+        #chunked_documents = chunk_documents(all_documents)
+        chunked_documents = all_documents
+    
         # 提取文檔內容
         doc_texts = []
         for doc in chunked_documents:
