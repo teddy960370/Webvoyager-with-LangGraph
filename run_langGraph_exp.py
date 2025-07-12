@@ -36,8 +36,6 @@ from evaluation.auto_eval import auto_eval_by_gpt4v,save_evaluation_results
 # 引入本地 RAG 模組取代 RagFlow
 from local_rag import get_retriever_context
 
-from RagFlow import RagflowAPIConfig , RagflowAPI 
-
 class State(TypedDict):
     task: Annotated[str, "The task to be completed"]
     auto_messages: Annotated[list, add_messages]
@@ -124,7 +122,7 @@ def GetRetrieverContext(llm ,Task , Domain ,webName, print_answer = False) -> Di
     context = get_retriever_context(Task, Domain, webName, llm, print_answer)
     
     # 如果沒有檢索到上下文或發生錯誤，返回 None
-    if context is None or "No data available." in context:
+    if context is None or "No data available" in context:
         logging.warning(f"未能為任務 '{Task}' 在網站 '{Domain}' 檢索到有用的上下文")
         return None
         
@@ -175,7 +173,7 @@ def launchBrowser(state: State):
     state["download_files"] = []
     state["iteration"] = 0
 
-    state["RetrieverContext"] = "No data available."
+    state["RetrieverContext"] = "No data available"
     if args.use_rag:
         state["RetrieverContext"] = GetRetrieverContext(state["llm"], task['ques'], task['web'],task['web_name'])
 
@@ -462,6 +460,7 @@ def action(state: State):
             exec_action_click(info, web_ele, driver)
             
             # Handle PDF download
+            os.makedirs(args.download_dir, exist_ok=True)
             current_files = sorted(os.listdir(args.download_dir))
             if current_files != state["download_files"]:
                 time.sleep(10)
@@ -681,7 +680,7 @@ def setup_logger(folder_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test_file', type=str, default='data/test.json')
-    parser.add_argument('--max_iter', type=int, default=5)
+    parser.add_argument('--max_iter', type=int, default=15)
     parser.add_argument("--api_key", default="key", type=str, help="YOUR_OPENAI_API_KEY")
     parser.add_argument("--api_model", default="gpt-4-vision-preview", type=str, help="api model name")
     parser.add_argument("--output_dir", type=str, default='results')
