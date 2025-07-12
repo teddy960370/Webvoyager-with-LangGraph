@@ -36,8 +36,6 @@ from evaluation.auto_eval import auto_eval_by_gpt4v,save_evaluation_results
 # 引入本地 RAG 模組取代 RagFlow
 from local_rag import get_retriever_context
 
-from RagFlow import RagflowAPIConfig , RagflowAPI 
-
 class State(TypedDict):
     task: Annotated[str, "The task to be completed"]
     auto_messages: Annotated[list, add_messages]
@@ -157,13 +155,7 @@ def launchBrowser(state: State):
     driver.get(task['web'])
     
     try:
-        # 等待頁面載入完成
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support.expected_conditions import staleness_of
-        
-        WebDriverWait(driver, 10).until(
-            lambda driver: driver.execute_script('return document.readyState') == 'complete'
-        )
+        driver.find_element(By.TAG_NAME, 'body').click()
     except:
         pass
     
@@ -188,7 +180,7 @@ def format_observation(state: State):
         args = state["args"]
         
         if not args.text_only:
-            rects, web_eles, web_eles_text = get_web_element_rect(driver, fix_color=args.fix_box_color,detect_all =args.som_scan_all)
+            rects, web_eles, web_eles_text = get_web_element_rect(driver, fix_color=args.fix_box_color)
             state["web_elements"] = {
                 "rects": rects,
                 "elements": web_eles,
@@ -280,7 +272,7 @@ def thoughts(state: State):
         if args.text_only:
             state["messages"].append({'role': 'system', 'content': SYSTEM_PROMPT_TEXT_ONLY})
         else:
-            state["messages"].append({'role': 'system', 'content': SYSTEM_PROMPT_TYPE})
+            state["messages"].append({'role': 'system', 'content': SYSTEM_PROMPT})
     
     obs_prompt = "Observation: please analyze the attached screenshot and give the Thought and Action. "
     if args.text_only:
@@ -392,7 +384,7 @@ def exec_action_type(info, web_ele, driver_task):
 
     actions.send_keys(type_content)
     actions.pause(2)
-    #actions.send_keys(Keys.ENTER)
+    actions.send_keys(Keys.ENTER)
     actions.perform()
     time.sleep(10)
     return warn_obs
