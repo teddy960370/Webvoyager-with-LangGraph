@@ -275,7 +275,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
         print(f"Error parsing JSON response: {e}")
         return
 
-def save_evaluation_results(process_dir, results_by_website):
+def save_evaluation_results(process_dir, results_by_website , max_steps):
     """
     將評估結果儲存為 Excel 檔案，包含詳細結果和準確率統計
     Args:
@@ -321,6 +321,8 @@ def save_evaluation_results(process_dir, results_by_website):
             website_stats[website] = {'total': 0, 'success': 0, 'no_answer': 0, 'wrong_answer': 0 , 'total_steps': 0}
         website_stats[website]['total'] += 1
         website_stats[website]['total_steps'] += len(result['Steps'])  # 累計步驟數
+        if result['Result'] == 'no_answer':
+            website_stats[website]['total_steps'] += max_steps  # no answer is reach max steps
         if result['Result'] == 'SUCCESS':
             website_stats[website]['success'] += 1
         elif result['Result'] == 'NOT SUCCESS' and result['Reason'] == 'No final answer found in the conversation':
@@ -363,6 +365,7 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for the LLM response")
     parser.add_argument("--seed", type=int, default=42, help="Seed for random number generation")
     parser.add_argument("--llm", type=str, default="openai", choices=["openai", "azure", "openrouter", "gemini"])
+    parser.add_argument('--max_iter', type=int, default=15)
 
     args = parser.parse_args()
 
@@ -444,7 +447,7 @@ def main():
 
     # 儲存所有評估結果
 
-    save_evaluation_results(args.process_dir, all_results)
+    save_evaluation_results(args.process_dir, all_results , args.max_iter)
 
     
 

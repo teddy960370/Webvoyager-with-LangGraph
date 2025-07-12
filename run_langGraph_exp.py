@@ -588,15 +588,6 @@ def eval(state: State):
         'Steps': result['steps']
     }
 
-    # save results as json file
-    knowledge_dir = f"./data/{task['web_name']}"
-    if not os.path.exists(knowledge_dir):
-        os.makedirs(knowledge_dir)
-    timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    fileName = f"task{task['web_name']}--{task['id']}_{result['result']}_{timestamp}.json"
-    with open(os.path.join(knowledge_dir, fileName), 'w', encoding='utf-8') as f:
-        json.dump(result_dict, f, ensure_ascii=False, indent=4)
-
     state["eval_result"] = result_dict
 
     return state
@@ -673,7 +664,7 @@ def setup_logger(folder_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test_file', type=str, default='data/test.json')
-    parser.add_argument('--max_iter', type=int, default=5)
+    parser.add_argument('--max_iter', type=int, default=15)
     parser.add_argument("--api_key", default="key", type=str, help="YOUR_OPENAI_API_KEY")
     parser.add_argument("--api_model", default="gpt-4-vision-preview", type=str, help="api model name")
     parser.add_argument("--output_dir", type=str, default='results')
@@ -830,7 +821,7 @@ def main():
             continue
 
     # Save evaluation results to the result directory
-    save_evaluation_results(result_dir, eval_results)
+    save_evaluation_results(result_dir, eval_results , args.max_iter)
 
     #image = graph.get_graph().draw_mermaid_png()
     #showImage(image)
