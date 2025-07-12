@@ -1,0 +1,160 @@
+[
+    {
+        "web_name": "ESPN",
+        "urls": [
+            "https://espn.com/",
+            "https://espn.com/nba/",
+            "https://espn.com/nba/teams",
+            "https://espn.com/nba/scoreboard",
+            "https://espn.com/nba/schedule",
+            "https://espn.com/nfl/",
+            "https://espn.com/nfl/draft/rounds"
+        ]
+    },
+    {
+        "web_name": "Allrecipes",
+        "urls": [
+            "https://www.allrecipes.com/",
+            "https://www.allrecipes.com/recipes/85/holidays-and-events/",
+            "https://www.allrecipes.com/kitchen-tips/",
+            "https://www.allrecipes.com/food-news-trends/",
+            "https://www.allrecipes.com/about-us-6648102",
+            "https://www.allrecipes.com/recipes/1642/everyday-cooking/",
+            "https://www.allrecipes.com/recipes/455/everyday-cooking/more-meal-ideas/30-minute-meals/"
+        ]
+    },
+    {
+        "web_name": "Amazon",
+        "urls": [
+            "https://www.amazon.com/",
+            "https://www.amazon.com/gp/goldbox",
+            "https://www.amazon.com/ask/guidelines/qa/",
+            "https://www.amazon.com/gift-cards/b/?ie=UTF8&node=2238192011",
+            "https://www.amazon.com/Amazon-Devices/b/?ie=UTF8&node=2102313011",
+            "https://www.amazon.com/Amazon-Video/b/?ie=UTF8&node=2858778011",
+            "https://www.amazon.com/b/?_encoding=UTF8&ld=AZUSSOA-sell&node=12766669011"
+        ]
+    },
+    {
+        "web_name": "Apple",
+        "urls": [
+            "https://www.apple.com/",
+            "https://www.apple.com/iphone/",
+            "https://www.apple.com/ipad/",
+            "https://support.apple.com/",
+            "https://www.apple.com/store",
+            "https://www.apple.com/shop/buy-iphone/iphone-16-pro",
+            "https://www.apple.com/iphone/compare/"
+        ]
+    },
+    {
+        "web_name": "ArXiv",
+        "urls": [
+            "https://arxiv.org/",
+            "https://info.arxiv.org/help/index.html",
+            "https://arxiv.org/search/advanced",
+            "https://arxiv.org/catchup",
+            "https://info.arxiv.org/about/donate.html",
+            "https://info.arxiv.org/brand/swag.html#store"
+        ]
+    },
+    {
+        "web_name": "BBC News",
+        "urls": [
+            "https://www.bbc.com/",
+            "https://www.bbc.com/culture",
+            "https://www.bbc.com/sport",
+            "https://www.bbc.com/sport/formula1",
+            "https://www.bbc.com/business/technology-of-business",
+            "https://www.bbc.com/future-planet"
+        ]
+    },
+    {
+        "web_name": "Cambridge Dictionary",
+        "urls": [
+            "https://dictionary.cambridge.org/",
+            "https://dictionary.cambridge.org/plus/",
+            "https://dictionary.cambridge.org/thesaurus/",
+            "https://dictionary.cambridge.org/translate/",
+            "https://dictionary.cambridge.org/pronunciation/",
+            "https://dictionary.cambridge.org/dictionary/english/",
+            "https://dictionary.cambridge.org/dictionary/learner-english/"
+        ]
+    },
+    {
+        "web_name": "Coursera",
+        "urls": [
+            "https://www.coursera.org/",
+            "https://www.coursera.org/degrees",
+            "https://www.coursera.org/career-academy",
+            "https://www.coursera.org/browse/data-science",
+            "https://www.coursera.org/courses?query=python",
+            "https://www.coursera.support/s/learner-help-center"
+        ]
+    },
+    {
+        "web_name": "GitHub",
+        "urls": [
+            "https://github.com/",
+            "https://github.com/enterprise",
+            "https://github.com/resources/articles/ai",
+            "https://github.com/trending",
+            "https://github.com/sindresorhus/awesome",
+            "https://github.com/features/copilot/copilot-business"
+        ]
+    },
+    {
+        "web_name": "Google Map",
+        "urls": [
+            "https://www.google.com/maps",
+            "https://support.google.com/maps/answer/144349",
+            "https://support.google.com/maps/answer/6291839",
+            "https://support.google.com/maps/answer/2839911",
+            "https://support.google.com/maps/answer/1234567",
+            "https://support.google.com/maps/answer/144339"
+        ]
+    },
+    {
+        "web_name": "Huggingface",
+        "urls": [
+            "https://huggingface.co/",
+            "https://huggingface.co/docs",
+            "https://huggingface.co/models",
+            "https://huggingface.co/datasets",
+            "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct",
+            "https://huggingface.co/huggingface",
+            "https://huggingface.co/learn"
+        ]
+    },
+    {
+        "web_name": "Wolfram Alpha",
+        "urls": [
+            "https://www.wolframalpha.com/",
+            "https://www.wolframalpha.com/examples",
+            "https://www.wolframalpha.com/examples/pro-features/step-by-step-solutions",
+            "https://www.wolframalpha.com/pro",
+            "https://www.wolframalpha.com/tour",
+            "https://www.wolframalpha.com/input?i=Naked+Lunch%2C+1st+to+Die"
+        ]
+    },
+    {
+        "web_name": "Booking",
+        "urls": [
+            "https://www.booking.com/",
+            "https://www.booking.com/content/about.zh-tw.html",
+            "https://secure.booking.com/help",
+            "https://www.booking.com/tpi_faq.zh-tw.html",
+            "https://www.booking.com/taxi",
+            "https://www.booking.com/genius.zh-tw.html"
+        ]
+    },
+    {
+        "web_name": "Google Flights",
+        "urls": [
+            "https://www.google.com/travel/flights/",
+            "https://support.google.com/travel/",
+            "https://support.google.com/travel/answer/2475306",
+            "https://support.google.com/travel/answer/7664728"
+        ]
+    }
+]
