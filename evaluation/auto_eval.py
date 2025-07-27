@@ -100,6 +100,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
         print()
         return {
             'result': 'NOT SUCCESS',
+            'use_rag': False,
             'reason': 'Only system messages found, no assistant response',
             'task_question': 'Task information not found',
             'answer': '' , # 新增空的 answer 欄位
@@ -119,12 +120,15 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
     match_question = re.search(pattern_question, task_content)
     task_question = match_question.group(1).strip() if match_question else task_content.strip()
 
+    use_rag = "Here's the following operating manual provides suggestions" in task_info
+
     ans_info = it_messages[-1]["content"]
     if 'Action: ANSWER' not in ans_info:
         print('Not find answer for ' + process_dir)
         print()
         return {
             'result': 'NOT SUCCESS',
+            'use_rag': use_rag,
             'reason': 'No final answer found in the conversation',
             'task_question': task_question,
             'answer': '',  # 新增空的 answer 欄位
@@ -221,6 +225,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
     if policyError:
         return {
             'result': 'NOT SUCCESS',
+            'use_rag': use_rag,
             'reason': 'Content policy violation',
             'task_question': task_question,
             'answer': answer_content,
@@ -265,6 +270,7 @@ def auto_eval_by_gpt4v(process_dir, llm, img_num):
         
         return {
             'result': auto_eval_res,
+            'use_rag': use_rag,
             'reason': thought,
             'task_question': task_question,
             'answer': answer_content,
@@ -293,7 +299,7 @@ def save_evaluation_results(process_dir, results_by_website , max_steps):
     ws_details.title = "Detailed Results"
     
     # 設定欄位
-    headers = ['Website', 'Task_ID', 'Task_Question', 'Result', 'Answer', 'Reason' , 'Steps']
+    headers = ['Website', 'Task_ID', 'Use_RAG','Task_Question', 'Result', 'Answer', 'Reason' , 'Steps']
     for col, header in enumerate(headers, 1):
         ws_details.cell(row=1, column=col, value=header)
         # 設定欄寬
@@ -414,6 +420,7 @@ def main():
                 result_dict = {
                     'Website': web,
                     'Task_ID': idx,
+                    'use_rag': eval_result['use_rag'],
                     'Task_Question': eval_result['task_question'],
                     'Result': eval_result['result'],
                     'Answer': eval_result['answer'],  # 新增 answer 欄位

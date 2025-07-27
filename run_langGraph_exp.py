@@ -90,10 +90,11 @@ def driver_config(args):
         }
     )
 
-    # 在 driver_config 函數中添加以下選項
+    
     options.add_argument('--disable-gpu')  # 停用 GPU 加速
     options.add_argument('--disable-software-rasterizer')  # 停用軟體光柵化
     options.add_argument('--disable-features=MediaSessionService') # 直接停用媒體功能
+    options.add_argument("disable-blink-features=AutomationControlled") # 禁用自動化控制特徵
     return options
 
 def setup_environment(args):
@@ -588,6 +589,7 @@ def eval(state: State):
     result_dict = {
         'Website': task['web_name'],
         'Task_ID': task['id'],
+        'Use_RAG': args.use_rag,
         'Task_Question': result['task_question'],
         'Result': result['result'],
         'Answer': result['answer'],  # 新增 answer 欄位
@@ -611,7 +613,7 @@ def eval(state: State):
 def is_success(state: State) -> Literal["Success", "NotSuccess"]:
 
     eval_result = state["eval_result"]
-    if eval_result.get('Result') == 'Success' or state["args"].use_rag == True:
+    if eval_result.get('Result') == 'SUCCESS' or state["args"].use_rag == True:
         return "Success"
     
     state["args"].use_rag = True 
@@ -837,7 +839,7 @@ def main():
             continue
 
     # Save evaluation results to the result directory
-    save_evaluation_results(result_dir, eval_results)
+    save_evaluation_results(result_dir, eval_results, args.max_iter)
 
     #image = graph.get_graph().draw_mermaid_png()
     #showImage(image)
