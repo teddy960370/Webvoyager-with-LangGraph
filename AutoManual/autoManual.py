@@ -196,24 +196,25 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test_file', type=str, default='./AutoManual/target.json')
     parser.add_argument("--api_key", default="key", type=str, help="YOUR_OPENAI_API_KEY")
-    parser.add_argument("--api_model", default="gpt-4-vision-preview", type=str, help="api model name")
+    parser.add_argument("--firecrawl-api-key", default="key", type=str, help="YOUR_FIRECRAWL_API_KEY")
+    parser.add_argument("--api_model", default="gpt-4.1", type=str, help="api model name")
     parser.add_argument("--temperature", type=float, default=1.0)
 
     args = parser.parse_args()
 
     llm = ChatOpenAI(
-        base_url="https://openrouter.ai/api/v1",
+        #base_url="https://openrouter.ai/api/v1",
         api_key=args.api_key,
         model=args.api_model,
         temperature=args.temperature
     )
 
     # 使用您的 Firecrawl API 金鑰進行初始化
-    app = FirecrawlApp(api_key="fc-567a5e213b604637bee964366187e08d")
+    app = FirecrawlApp(api_key=args.firecrawl_api_key)
 
     webs = ['Amazon', 'Apple', 'ArXiv', 'BBC News', 'Cambridge Dictionary',
             'Coursera', 'ESPN', 'GitHub', 'Google Map', 'Huggingface', 'Wolfram Alpha','Booking','Google Flights', 'Google Search']
-    webs = ['Google Flights']
+    webs = ['Google Search']
     # read url list from file
     web_list = []
     with open(args.test_file, 'r', encoding='utf-8') as f:
